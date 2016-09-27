@@ -29,6 +29,10 @@ A little bit about the Hallem and Carlson 2006 dataset:
 Fig 1a: raw Hallem and Carlson 2006
 """
 
+# TODO using receptor data now. mostly the same as using glomeruli data, but should perhaps
+# be using glomeruli data instead if there is overlapping expression of any of the receptors
+# in their dataset, or if any two provide input to a common set of PNs
+
 # skip glomerulus labels, which are not assigned to each response
 # keep the receptor labels, which are assigned to each response
 hc06 = pd.read_csv('~/Dropbox/Hallem_Carlson_2006.csv', skiprows=1)
@@ -66,7 +70,7 @@ but that might be wrong. Read more carefully, but they might not say.
 """
 orn[orn < 0] = 0
 
-cax = ax.matshow(hc06.as_matrix(), cmap=plt.cm.viridis, aspect=0.3) #aspect='auto')
+cax = ax.matshow(orn, cmap=plt.cm.viridis, aspect=0.3) #aspect='auto')
 
 plt.title('Binned ORN responses', fontweight='bold', y=1.01)
 
@@ -91,16 +95,49 @@ cbar_font = {'fontsize': axes_font_size ,
              'horizontalalignment': 'center'}
 
 cbar = fig.colorbar(cax, shrink=0.6, aspect=30, pad=0.02)
-cbar.set_label('Spike count change in 500ms presentation', **cbar_font)
+cbar.set_label('Spike count change in 500ms(?) presentation', **cbar_font)
 
+# keep all columns
+# but exclude last odor label (because it is the spontaneous firing rate)
 plt.xticks(np.arange(len(hc06.columns)))
-plt.yticks(np.arange(len(hc06.index)))
+plt.yticks(np.arange(len(hc06.index) - 1))
 ax.set_xticklabels(hc06.columns.values, rotation='horizontal')
 ax.xaxis.set_ticks_position('bottom')
-ax.set_yticklabels(hc06.index.values, fontsize=6)
+ax.set_yticklabels(hc06.index.values[:-1], fontsize=6)
+
+"""
+Fig 1b: simple model PN responses (assuming now 1 receptor -> 1 PN (class). see note above)
+"""
+
+# units of Hz in the paper
+# TODO is that correct here?
+rmax = 165
+sigma = 12
+
+pn = rmax * orn**1.5 / (sigma**1.5 + orn**1.5)
+# TODO add noise a la methods
+
+# TODO make a function out of me. maybe subplot?
+fig2 = plt.figure()
+ax2 = fig2.add_subplot(111)
+
+cax2 = ax2.matshow(pn, cmap=plt.cm.viridis, aspect=0.3) #aspect='auto')
+
+plt.title('Binned model PN responses', fontweight='bold', y=1.01)
+
+plt.xlabel('Receptor in recorded cell', x_axes_font)
+plt.ylabel('Odorant', y_axes_font)
+
+cbar2 = fig.colorbar(cax2, shrink=0.6, aspect=30, pad=0.02)
+cbar2.set_label('Spike count change in 500ms(?) presentation', **cbar_font)
+
+# keep all columns
+# but exclude last odor label (because it is the spontaneous firing rate)
+plt.xticks(np.arange(len(hc06.columns)))
+plt.yticks(np.arange(len(hc06.index) - 1))
+ax2.set_xticklabels(hc06.columns.values, rotation='horizontal')
+ax2.xaxis.set_ticks_position('bottom')
+ax2.set_yticklabels(hc06.index.values[:-1], fontsize=6)
 
 plt.show()
 
-"""
-Fig 1b: 
-"""
