@@ -128,7 +128,7 @@ plt.title('Binned model PN responses', fontweight='bold', y=1.01)
 plt.xlabel('Receptor in recorded cell', x_axes_font)
 plt.ylabel('Odorant', y_axes_font)
 
-cbar2 = fig.colorbar(cax2, shrink=0.6, aspect=30, pad=0.02)
+cbar2 = fig2.colorbar(cax2, shrink=0.6, aspect=30, pad=0.02)
 cbar2.set_label('Spike count change in 500ms(?) presentation', **cbar_font)
 
 # keep all columns
