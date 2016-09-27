@@ -38,7 +38,7 @@ Fig 1a: raw Hallem and Carlson 2006
 
 # skip glomerulus labels, which are not assigned to each response
 # keep the receptor labels, which are assigned to each response
-hc06 = pd.read_csv('~/Dropbox/Hallem_Carlson_2006.csv', skiprows=1)
+hc06 = pd.read_csv('./Hallem_Carlson_2006.csv', skiprows=1)
 
 # first column of first row manually set to this in the CSV data file
 # might want to use more pandonic way of doing this
@@ -157,24 +157,31 @@ fig3 = plt.figure()
 #fig3.title('Mean firing rates across odors')
 
 a1 = plt.subplot(131)
-plt.plot(np.arange(orn.shape[0]), np.mean(orn, axis=1), '.')
+orn_mean = np.mean(orn, axis=1)
+plt.plot(np.arange(orn.shape[0]), orn_mean / np.mean(orn_mean), '.')
 plt.title('ORN')
 plt.ylabel('Firing rate (spikes/s)')
 
-# TODO this overall activity seems too high maybe?
+# this overall activity just seemed to high because i didn't yet normalize
 a2 = plt.subplot(132)
-plt.plot(np.arange(pn_no_inh.shape[0]), np.mean(pn_no_inh, axis=1), '.')
+pn_no_inh_mean = np.mean(pn_no_inh, axis=1)
+plt.plot(np.arange(pn_no_inh.shape[0]), pn_no_inh_mean / np.mean(pn_no_inh_mean), '.')
 plt.title('PN (no inhibition)')
+a2.yaxis.set_ticklabels([])
 plt.xlabel('Odor')
 
 a3 = plt.subplot(133)
-plt.plot(np.arange(pn.shape[0]), np.mean(pn, axis=1), '.')
+pn_mean = np.mean(pn, axis=1)
+plt.plot(np.arange(pn.shape[0]), pn_mean / np.mean(pn_mean), '.')
 plt.title('PN')
+a3.yaxis.set_ticklabels([])
 
+# get max ylim so we can rescale all subplots to have same max y limit
 axs = [a1, a2, a3]
 ymax = max([max(a.get_ylim()) for a in axs])
 
 for a in axs:
     a.set_ylim(0, ymax)
+    a.xaxis.set_ticklabels([])
 
 plt.show()
