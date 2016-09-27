@@ -60,6 +60,12 @@ orn = np.empty_like(delta_orn) * np.nan
 for i in range(delta_orn.shape[0]):
     orn[i,:] = delta_orn[i,:] + spont_orn
 
+"""
+It seems that what Luo et al do is set anything here that would go below zero to zero,
+but that might be wrong. Read more carefully, but they might not say.
+"""
+orn[orn < 0] = 0
+
 cax = ax.matshow(hc06.as_matrix(), cmap=plt.cm.viridis, aspect=0.3) #aspect='auto')
 
 plt.title('Binned ORN responses', fontweight='bold', y=1.01)
