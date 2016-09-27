@@ -29,6 +29,9 @@ A little bit about the Hallem and Carlson 2006 dataset:
 Fig 1a: raw Hallem and Carlson 2006
 """
 
+# TODO exclude pheromone (and other selective) receptors, to compare to what Luo et al
+# actually did
+
 # TODO using receptor data now. mostly the same as using glomeruli data, but should perhaps
 # be using glomeruli data instead if there is overlapping expression of any of the receptors
 # in their dataset, or if any two provide input to a common set of PNs
@@ -110,20 +113,22 @@ Fig 1b: simple model PN responses (assuming now 1 receptor -> 1 PN (class). see 
 """
 
 # units of Hz in the paper
-# TODO is that correct here?
+# TODO is that correct here? (seems so)
 rmax = 165
 sigma = 12
 
-pn = rmax * orn**1.5 / (sigma**1.5 + orn**1.5)
+# model PN responses with no inhibition
+pn_no_inh = rmax * orn**1.5 / (sigma**1.5 + orn**1.5)
+
 # TODO add noise a la methods
 
 # TODO make a function out of me. maybe subplot?
 fig2 = plt.figure()
 ax2 = fig2.add_subplot(111)
 
-cax2 = ax2.matshow(pn, cmap=plt.cm.viridis, aspect=0.3, vmin=cbar.vmin, vmax=cbar.vmax) #aspect='auto')
+cax2 = ax2.matshow(pn_no_inh, cmap=plt.cm.viridis, aspect=0.3, vmin=cbar.vmin, vmax=cbar.vmax)
 
-plt.title('Binned model PN responses', fontweight='bold', y=1.01)
+plt.title('Binned model PN responses (no global inhibition)', fontweight='bold', y=1.01)
 
 plt.xlabel('Receptor in recorded cell', x_axes_font)
 plt.ylabel('Odorant', y_axes_font)
@@ -139,5 +144,37 @@ ax2.set_xticklabels(hc06.columns.values, rotation='horizontal')
 ax2.xaxis.set_ticks_position('bottom')
 ax2.set_yticklabels(hc06.index.values[:-1], fontsize=6)
 
-plt.show()
+"""
+Fig 1C - E
+"""
 
+m = 0.05
+# model PN responses WITH global inhibition (dependent on sum of ORN activity)
+# TODO make sure this broadcasting with newaxis is working correctly
+pn = rmax * orn**1.5 / (sigma**1.5 + orn**1.5 + (m * np.sum(orn, axis=1)[:, np.newaxis])**1.5)
+
+fig3 = plt.figure()
+#fig3.title('Mean firing rates across odors')
+
+a1 = plt.subplot(131)
+plt.plot(np.arange(orn.shape[0]), np.mean(orn, axis=1), '.')
+plt.title('ORN')
+plt.ylabel('Firing rate (spikes/s)')
+
+# TODO this overall activity seems too high maybe?
+a2 = plt.subplot(132)
+plt.plot(np.arange(pn_no_inh.shape[0]), np.mean(pn_no_inh, axis=1), '.')
+plt.title('PN (no inhibition)')
+plt.xlabel('Odor')
+
+a3 = plt.subplot(133)
+plt.plot(np.arange(pn.shape[0]), np.mean(pn, axis=1), '.')
+plt.title('PN')
+
+axs = [a1, a2, a3]
+ymax = max([max(a.get_ylim()) for a in axs])
+
+for a in axs:
+    a.set_ylim(0, ymax)
+
+plt.show()
