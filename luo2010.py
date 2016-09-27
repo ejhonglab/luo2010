@@ -121,7 +121,7 @@ pn = rmax * orn**1.5 / (sigma**1.5 + orn**1.5)
 fig2 = plt.figure()
 ax2 = fig2.add_subplot(111)
 
-cax2 = ax2.matshow(pn, cmap=plt.cm.viridis, aspect=0.3) #aspect='auto')
+cax2 = ax2.matshow(pn, cmap=plt.cm.viridis, aspect=0.3, vmin=cbar.vmin, vmax=cbar.vmax) #aspect='auto')
 
 plt.title('Binned model PN responses', fontweight='bold', y=1.01)
 
