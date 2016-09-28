@@ -4,6 +4,55 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
+from scipy import linalg 
+
+# adapted from a StackOverflow answer by 'doug'
+def pca(data, components=None):
+    """
+    returns: data transformed in 2 dims/columns + regenerated original data
+    pass in: data as 2D NumPy array
+    """
+    
+    if components == None:
+        components = len(data)
+
+    # mean center the data
+    data -= data.mean(axis=0)
+    # calculate the covariance matrix
+    R = np.cov(data, rowvar=False)
+
+    # calculate eigenvectors & eigenvalues of the covariance matrix
+    # use 'eigh' rather than 'eig' since R is symmetric, 
+    # the performance gain is substantial
+    evals, evecs = linalg.eigh(R)
+
+    # sort eigenvalue in decreasing order
+    idx = np.argsort(evals)[::-1]
+    evecs = evecs[:,idx]
+
+    # sort eigenvectors according to same index
+    evals = evals[idx]
+
+    # select the first n eigenvectors (n is desired dimension
+    # of rescaled data array, or dims_rescaled_data)
+    evecs = evecs[:, :components]
+
+    # carry out the transformation on the data using eigenvectors
+    # and return the re-scaled data, eigenvalues, and eigenvectors
+    return np.dot(evecs.T, data.T).T, evals, evecs
+
+def test_pca(data):
+    '''
+    test by attempting to recover original data array from
+    the eigenvectors of its covariance matrix & comparing that
+    'recovered' array with the original data
+    '''
+    _ , _ , eigenvectors = pca(data)
+    data_recovered = np.dot(eigenvectors, m).T
+
+    data_recovered += data_recovered.mean(axis=0)
+
+    assert np.allclose(data, data_recovered)
 
 # prevents white lines from being overlayed over data
 sns.set_style('dark')
@@ -74,6 +123,8 @@ but that might be wrong. Read more carefully, but they might not say.
 orn[orn < 0] = 0
 
 cax = ax.matshow(orn, cmap=plt.cm.viridis, aspect=0.3) #aspect='auto')
+
+# TODO make this fig on a subplot with the next one
 
 plt.title('Binned ORN responses', fontweight='bold', y=1.01)
 
@@ -183,5 +234,82 @@ ymax = max([max(a.get_ylim()) for a in axs])
 for a in axs:
     a.set_ylim(0, ymax)
     a.xaxis.set_ticklabels([])
+
+"""
+Fig 1F - H: skree plots of principal components of odor responses
+skree plot = % variance "explained" as a function of the principal component number
+
+Note: they say "percentage of variances from a PCA analysis of the response used in C-E"
+which seems to mean of the average responses. It is unclear that this is meaningful, as
+apart from normalizing in the antennal lobe, the sum of the ORN response is not really
+what is important. Is the sum of the PN response very important, or always held approx
+constant?
+
+I guess they are treating odors as observations?
+
+"""
+
+# 're-scaled' data, eigenvalues, and eigenvectors
+sorn, orn_eval, orn_evec = pca(orn)
+snlpn, nlpn_eval, nlpn_evec = pca(pn_no_inh)
+spn, pn_eval, pn_evec = pca(pn)
+
+"""
+"PCA replaces original variables with new variables, called principal components, 
+ which are orthogonal (i.e. they have zero covariations) and have variances
+ (called eigenvalues)..."
+
+ The diagonal sums of original covariance matrix and covariance matrix of PCs, a diagonal matrix,
+ are equal. This quantity is called the 'total variability.' Off-diagonal sum of covariance matrix
+ is of course not guaranteed to be zero.
+"""
+
+# PCA should maintain the total variance after change of basis to that of the eigenvectors
+# TODO this isn't true right now. why?
+assert np.isclose(np.cov(orn).diagonal().sum(), np.cov(sorn).diagonal().sum())
+assert np.isclose(np.cov(pn_no_inh).diagonal().sum(), np.cov(pn_no_inh).diagonal().sum())
+assert np.isclose(np.cov(pn).diagonal().sum(), np.cov(pn).diagonal().sum())
+
+# and off diagonal elements should be zero
+# which means the sum of the whole matrix should be the sum of the diagonal
+assert np.isclose(np.cov(sorn).diagonal().sum(), np.cov(sorn).sum())
+assert np.isclose(np.cov(snlpn).diagonal().sum(), np.cov(snlpn).sum())
+assert np.isclose(np.cov(spn).diagonal().sum(), np.cov(spn).sum())
+
+# has its own assertion
+test_pca(orn)
+test_pca(pn_no_inh)
+test_pca(pn)
+
+# if our PCA is working correctly, generate the Skree plots
+plt.figure()
+plt.title('Fraction of total variance along each PC')
+plt.xlabel('n-th largest eigenvalue of eigenvectors')
+plt.ylabel("Fraction of total variance 'explained'")
+
+plt.subplot(131)
+plt.plot(orn_eval / orn_eval.sum(), '.')
+plt.subplot(132)
+plt.plot(nlpn_eval / nlpn_eval.sum(), '.')
+plt.subplot(133)
+plt.plot(pn_eval / pn_eval.sum(), '.')
+
+"""
+Fig 2: Responses of model LHNs
+"""
+
+"""
+Fig 3: Model KC responses
+"""
+
+"""
+Fig 4: Model KC responses
+"""
+
+"""
+Fig 5: Effect of feedforward nonlinearity and lateral suppression on LHN and KC responses.
+"""
+
+
 
 plt.show()
