@@ -266,6 +266,12 @@ spn, pn_eval, pn_evec = pca(pn)
 
 # PCA should maintain the total variance after change of basis to that of the eigenvectors
 # TODO this isn't true right now. why?
+print(np.cov(orn))
+print(np.cov(sorn))
+print(np.cov(orn).diagonal())
+print(np.cov(sorn).diagonal())
+print(np.cov(orn).diagonal().sum())
+print(np.cov(sorn).diagonal().sum())
 assert np.isclose(np.cov(orn).diagonal().sum(), np.cov(sorn).diagonal().sum())
 assert np.isclose(np.cov(pn_no_inh).diagonal().sum(), np.cov(pn_no_inh).diagonal().sum())
 assert np.isclose(np.cov(pn).diagonal().sum(), np.cov(pn).diagonal().sum())
