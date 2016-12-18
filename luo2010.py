@@ -6,25 +6,59 @@ import seaborn as sns
 import pandas as pd
 from scipy import linalg 
 
+from sklearn.decomposition import PCA
+
 # adapted from a StackOverflow answer by 'doug'
 def pca(data, components=None):
     """
     returns: data transformed in 2 dims/columns + regenerated original data
     pass in: data as 2D NumPy array
     """
-    
-    if components == None:
-        components = len(data)
 
     # mean center the data
-    data -= data.mean(axis=0)
+    # could have been screwing things up later
+    #data -= data.mean(axis=0)
+
     # calculate the covariance matrix
+    # rowvar=False is equivalent to data being transposed (so output will be pxp as below)
     R = np.cov(data, rowvar=False)
+
+    assert np.allclose(np.cov(data, rowvar=False), np.cov(data - data.mean(axis=0), rowvar=False))
+
+    #print(R.diagonal().sum())
+
+    # using variable names in Wikipedia's first algorithm for computing PCA
+    # n observations, p variables
+    n = data.shape[0]
+    p = data.shape[1]
+
+    assert R.shape == (p, p)
+    centered = data - data.mean(axis=0)
+    assert np.allclose(1 / (n-1) * np.dot(centered.transpose(), centered), R)
+
+    if components == None:
+        components = p
+
+    # want (V^-1)CV = D, where V are eigenvectors
+    # D is a (pxp) diagonal matrix of eigenvalues
+    # matrix V also (pxp) is made of column vectors (the *right* eigenvectors)
+    # only under special conditions are the two each other's transpose
+    # but since the covariance matrix is symmetric, they are the transpose of each other
+
+    # TODO manually calculate eigenvectors and compare
 
     # calculate eigenvectors & eigenvalues of the covariance matrix
     # use 'eigh' rather than 'eig' since R is symmetric, 
     # the performance gain is substantial
     evals, evecs = linalg.eigh(R)
+
+    # test the eigenvectors satisfy identities that eigenvectors should satisfy
+    assert np.allclose(np.linalg.inv(evecs).dot(R).dot(evecs), np.diag(evals))
+    assert np.allclose(R, evecs.dot(np.diag(evals)).dot(np.linalg.inv(evecs)))
+
+    # each column of evecs is an eigenvector, as it should be
+    for i in range(evecs.shape[1]):
+        assert np.allclose(R.dot(evecs[:,i]), evals[i] * evecs[:,i])
 
     # sort eigenvalue in decreasing order
     idx = np.argsort(evals)[::-1]
@@ -37,9 +71,15 @@ def pca(data, components=None):
     # of rescaled data array, or dims_rescaled_data)
     evecs = evecs[:, :components]
 
+    #assert np.dot(evecs.T, data.T).T.shape == data.shape
+
     # carry out the transformation on the data using eigenvectors
     # and return the re-scaled data, eigenvalues, and eigenvectors
-    return np.dot(evecs.T, data.T).T, evals, evecs
+    # TODO HOW TO TEST WHETHER IT IS SUPPOSED TO BE EVEC OR TRANPOSE
+    # columns should be eigenvectors? can test identity, and then explicitly use same
+    # columns for reconstruction?
+    #return np.dot(evecs.T, data.T).T, evals, evecs
+    return np.dot(data, evecs), evals, evecs
 
 def test_pca(data):
     '''
@@ -47,12 +87,31 @@ def test_pca(data):
     the eigenvectors of its covariance matrix & comparing that
     'recovered' array with the original data
     '''
-    _ , _ , eigenvectors = pca(data)
-    data_recovered = np.dot(eigenvectors, m).T
+    projected, _, eigenvectors = pca(data)
 
-    data_recovered += data_recovered.mean(axis=0)
+    assert np.allclose(np.dot(eigenvectors, data.T).T, np.dot(data, eigenvectors.T))
+
+    data_recovered = np.dot(projected, np.linalg.inv(eigenvectors))
 
     assert np.allclose(data, data_recovered)
+
+    # TODO so it is invertible, but need to somehow test the components things
+    # are projected on to are indeed the best components (roughly same as
+    # premade PCA functions use)
+
+    projected, _, eigenvectors = pca(data, components=3)
+
+    sk_pca = PCA(n_components=3)
+    sk_data = sk_pca.fit_transform(data)
+
+    # TODO compare to premade PCA
+    print(np.sum(np.abs(sk_pca.inverse_transform(sk_data) - data)))
+    print(eigenvectors.shape)
+    # TODO it might be a matter of how i am inverting things (if it werent for pinv,
+    # this would not be invertible), but my error is way larger at 3 components...
+    print(np.sum(np.abs(np.dot(projected, np.linalg.pinv(eigenvectors)) - data)))
+    print(sk_data - projected)
+    #assert np.allclose(sk_sorn, projected)
 
 # prevents white lines from being overlayed over data
 sns.set_style('dark')
@@ -264,23 +323,52 @@ spn, pn_eval, pn_evec = pca(pn)
  is of course not guaranteed to be zero.
 """
 
+'''
+# can PCA perfectly reconstruct even random data with all components?
+rand = np.random.rand(orn.shape[0], orn.shape[1])
+rand_pca = PCA(n_components=rand.shape[1])
+sk_rand = rand_pca.fit_transform(rand)
+rand_reconstructed = rand_pca.inverse_transform(sk_rand)
+# yes, it can
+assert np.allclose(rand, rand_reconstructed)
+
+# one less component, and it can't
+rand_pca = PCA(n_components=(rand.shape[1] - 1))
+sk_rand = rand_pca.fit_transform(rand)
+rand_reconstructed = rand_pca.inverse_transform(sk_rand)
+assert not np.allclose(rand, rand_reconstructed)
+'''
+
+# PCA from sklearn to compare output against
+# not reducing # of components
+sk_pca = PCA(n_components=orn.shape[1])
+sk_sorn = sk_pca.fit_transform(orn)
+
+# hmmm. well the norms are the same to high precision, despite different vectors
+# ...why?
+print(np.linalg.norm(orn_evec))
+print(np.linalg.norm(sk_pca.components_))
+#print(np.linalg.norm(orn_evec - sk_pca.components_))
+
+print(orn_eval)
+print(sk_pca.explained_variance_)
+# Verdict: close, but always off a little bit. usually after 2 significant digits.
+# seems low by typical computer standards though... what explains the difference?
+
+# works just fine
+# assert np.allclose(sk_pca.inverse_transform(sk_sorn), orn)
+
 # PCA should maintain the total variance after change of basis to that of the eigenvectors
-# TODO this isn't true right now. why?
-print(np.cov(orn))
-print(np.cov(sorn))
-print(np.cov(orn).diagonal())
-print(np.cov(sorn).diagonal())
-print(np.cov(orn).diagonal().sum())
-print(np.cov(sorn).diagonal().sum())
-assert np.isclose(np.cov(orn).diagonal().sum(), np.cov(sorn).diagonal().sum())
-assert np.isclose(np.cov(pn_no_inh).diagonal().sum(), np.cov(pn_no_inh).diagonal().sum())
-assert np.isclose(np.cov(pn).diagonal().sum(), np.cov(pn).diagonal().sum())
+assert np.isclose(np.cov(orn.T).diagonal().sum(), np.cov(sorn.T).diagonal().sum())
+assert np.isclose(np.cov(pn_no_inh.T).diagonal().sum(), np.cov(snlpn.T).diagonal().sum())
+assert np.isclose(np.cov(pn.T).diagonal().sum(), np.cov(spn.T).diagonal().sum())
 
 # and off diagonal elements should be zero
 # which means the sum of the whole matrix should be the sum of the diagonal
-assert np.isclose(np.cov(sorn).diagonal().sum(), np.cov(sorn).sum())
-assert np.isclose(np.cov(snlpn).diagonal().sum(), np.cov(snlpn).sum())
-assert np.isclose(np.cov(spn).diagonal().sum(), np.cov(spn).sum())
+assert np.isclose(np.cov(sorn.T).diagonal().sum(), np.cov(sorn.T).sum())
+assert np.isclose(np.cov(snlpn.T).diagonal().sum(), np.cov(snlpn.T).sum())
+assert np.isclose(np.cov(spn.T).diagonal().sum(), np.cov(spn.T).sum())
+# TODO move above in to test_PCA
 
 # has its own assertion
 test_pca(orn)
