@@ -200,28 +200,23 @@ def matrix_plot(mat, title='', xlabel='ORN receptor', luo_style=False):
         cmap = plt.cm.jet
         mat = mat.T
         ylabel = 'Odor Index'
+        matrix_aspect = 'auto' # 1?
 
     else:
         cmap = plt.cm.viridis
         ylabel = 'Odor'
-
-        # keep all columns, but exclude last odor label 
-        # (because it is the spontaneous firing rate)
-        plt.xticks(np.arange(len(hc06.columns)))
-        plt.yticks(np.arange(len(hc06.index) - 1))
-
-        # TODO make sure label order is correct / matshow directly for df?
-        ax.set_xticklabels(hc06.columns.values, rotation='horizontal')
-        ax.xaxis.set_ticks_position('bottom')
-        ax.set_yticklabels(hc06.index.values[:-1], fontsize=6)
+        matrix_aspect = 0.3
+        # TODO should make x-axis font small enough that there is no overlapping
+        # text
 
     # TODO why was fig2's cax also getting vmin=cbar.vim and vmax=cbar.vmax
     # args? (for fig1's cbar)
     # TODO way to get these values in advance, to have plotting of these two be
     # totally independent, for code re-use? (fig1 cbar.vim and cbar.vmax)
     # (if necessary...)
+
     # TODO may need to change aspect for luo_style=True
-    cax = ax.matshow(mat, cmap=cmap, aspect=0.3) #aspect='auto')
+    cax = ax.matshow(mat, cmap=cmap, aspect=matrix_aspect) #aspect='auto')
 
     plt.title(title, fontweight='bold', y=1.01)
     plt.xlabel(xlabel, x_axes_font)
@@ -230,6 +225,26 @@ def matrix_plot(mat, title='', xlabel='ORN receptor', luo_style=False):
     cbar = fig.colorbar(cax, shrink=0.6, aspect=30, pad=0.02)
     cbar.set_label('Spike count change in 500ms(?) presentation', **cbar_font)
 
+    ax.xaxis.set_ticks_position('bottom')
+    if luo_style:
+        xstep = 20
+        ystep = 2
+        plt.xticks(range(20, mat.shape[1], xstep))
+        plt.yticks(range(2, mat.shape[0], ystep))
+        cbar.set_label('Firing Rate (Hz)',
+            **cbar_font)
+
+    else:
+        # keep all columns, but exclude last odor label
+        # (because it is the spontaneous firing rate)
+        plt.xticks(np.arange(len(hc06.columns)))
+        plt.yticks(np.arange(len(hc06.index) - 1))
+        # TODO make sure label order is correct / matshow directly for df?
+        ax.set_xticklabels(hc06.columns.values, rotation='horizontal')
+        ax.set_yticklabels(hc06.index.values[:-1], fontsize=6)
+
+        cbar.set_label('Spike count change in 500ms(?) presentation',
+            **cbar_font)
 
 """
 Fig 1a: raw Hallem and Carlson 2006
