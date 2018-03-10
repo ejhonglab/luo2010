@@ -477,16 +477,28 @@ plt.plot(pn_eval / pn_eval.sum(), '.')
 
 """
 Fig 2: Responses of model LHNs
+
+'...we constructed 110 LHNs, each selective for a different one of the 110
+odorants... We are not suggesting that each of these odors generates an innate
+behavbiort. Instead, the model LHNs are used...to demonstrate how...selective
+LHNs can be constructed.'
 """
+
+
 
 
 """
 Fig 3: Model KC responses
 """
+# 3A: response probabilities of model KCs, each receiving input from n PNs and
+# global inhibition
+
+# 3B: the number of missed odors as a function of # of PNs each KC receives
+# input from
 
 
 """
-Fig 4: Model KC responses
+Fig 4: LHN and KC responses for different concentrations
 """
 
 
