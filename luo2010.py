@@ -143,10 +143,6 @@ A little bit about the Hallem and Carlson 2006 dataset:
      the stimulus, exagerating the inhibition
 """
 
-"""
-Fig 1a: raw Hallem and Carlson 2006
-"""
-
 # TODO exclude pheromone (and other selective) receptors, to compare to what Luo
 # et al actually did
 
@@ -158,48 +154,15 @@ Fig 1a: raw Hallem and Carlson 2006
 # skip glomerulus labels, which are not assigned to each response
 # keep the receptor labels, which are assigned to each response
 # TODO just use drosolf?
+# TODO possible to make matrix plotting function not depend on this? maybe use
+# df? (so this could either be taken from drosolf or otherwise moved below,
+# with rest of numerical code, away from mess of plotting code)
 hc06 = pd.read_csv('./Hallem_Carlson_2006.csv', skiprows=1)
 
 # first column of first row manually set to this in the CSV data file
 # might want to use more pandonic way of doing this
 hc06 = hc06.set_index(['odor'])
 hc06.columns.name = 'receptor'
-
-# way to add the labels with less handles?
-fig = plt.figure()
-# the 111 means "1x1 grid, first subplot"
-ax = fig.add_subplot(111)
-
-# exclude the last row, because those are spontaneous firing rates
-delta_orn = hc06.as_matrix()[:-1,:]
-
-# get the spontaneous rates so we can add them back
-spont_orn = hc06.loc[hc06.index == 'spontaneous firing rate'
-        ].as_matrix().flatten()
-
-# recover actual firing rates (in the 500ms binning windows)
-orn = np.empty_like(delta_orn) * np.nan
-
-# TODO numpy way to do this broadcasting?
-
-# for each odor add the spontaneous rates to the difference observed for that
-# odor adds the vector of spontaneous rates across all receptors to the odor
-# specific
-# vector of reponses across receptors
-for i in range(delta_orn.shape[0]):
-    orn[i,:] = delta_orn[i,:] + spont_orn
-
-"""
-It seems that what Luo et al do is set anything here that would go below zero to
-zero, but that might be wrong. Read more carefully, but they might not say.
-"""
-orn[orn < 0] = 0
-
-cax = ax.matshow(orn, cmap=plt.cm.viridis, aspect=0.3) #aspect='auto')
-
-# TODO make this fig on a subplot with the next one
-
-plt.title('Binned ORN responses', fontweight='bold', y=1.01)
 
 axes_font_size = 10
 axes_font_weight = 'demi'
@@ -213,74 +176,156 @@ y_axes_font = {'fontsize': axes_font_size ,
                'verticalalignment': 'bottom',
                'horizontalalignment': 'center'}
 
-plt.xlabel('Receptor in recorded cell', x_axes_font)
-plt.ylabel('Odorant', y_axes_font)
-
 cbar_font = {'fontsize': axes_font_size ,
              'fontweight': axes_font_weight,
              'verticalalignment': 'top',
              'horizontalalignment': 'center'}
 
-cbar = fig.colorbar(cax, shrink=0.6, aspect=30, pad=0.02)
-cbar.set_label('Spike count change in 500ms(?) presentation', **cbar_font)
+def matrix_plot(mat, title='', xlabel='ORN receptor', luo_style=False):
+    """
+    Args:
+        luo_style (defaults to False): If True, uses jet(-like) color map and is
+        displayed with odor varying along the horizontal axis.
 
-# keep all columns
-# but exclude last odor label (because it is the spontaneous firing rate)
-plt.xticks(np.arange(len(hc06.columns)))
-plt.yticks(np.arange(len(hc06.index) - 1))
-ax.set_xticklabels(hc06.columns.values, rotation='horizontal')
-ax.xaxis.set_ticks_position('bottom')
-ax.set_yticklabels(hc06.index.values[:-1], fontsize=6)
+        If False, will use a more perceptually flat color map and display
+        transposed, to be able to read the odor names. (reading glomeruli
+        easier?)
+    """
+    fig = plt.figure()
+    # the 111 means "1x1 grid, first subplot"
+    ax = fig.add_subplot(111)
+
+    if luo_style:
+        # TODO better one? full range?
+        cmap = plt.cm.jet
+        mat = mat.T
+        ylabel = 'Odor Index'
+
+    else:
+        cmap = plt.cm.viridis
+        ylabel = 'Odor'
+
+        # keep all columns, but exclude last odor label 
+        # (because it is the spontaneous firing rate)
+        plt.xticks(np.arange(len(hc06.columns)))
+        plt.yticks(np.arange(len(hc06.index) - 1))
+
+        # TODO make sure label order is correct / matshow directly for df?
+        ax.set_xticklabels(hc06.columns.values, rotation='horizontal')
+        ax.xaxis.set_ticks_position('bottom')
+        ax.set_yticklabels(hc06.index.values[:-1], fontsize=6)
+
+    # TODO why was fig2's cax also getting vmin=cbar.vim and vmax=cbar.vmax
+    # args? (for fig1's cbar)
+    # TODO way to get these values in advance, to have plotting of these two be
+    # totally independent, for code re-use? (fig1 cbar.vim and cbar.vmax)
+    # (if necessary...)
+    # TODO may need to change aspect for luo_style=True
+    cax = ax.matshow(mat, cmap=cmap, aspect=0.3) #aspect='auto')
+
+    plt.title(title, fontweight='bold', y=1.01)
+    plt.xlabel(xlabel, x_axes_font)
+    plt.ylabel(ylabel, y_axes_font)
+
+    cbar = fig.colorbar(cax, shrink=0.6, aspect=30, pad=0.02)
+    cbar.set_label('Spike count change in 500ms(?) presentation', **cbar_font)
+
+
+"""
+Fig 1a: raw Hallem and Carlson 2006
+"""
+
+# exclude the last row, because those are spontaneous firing rates
+delta_orn = hc06.as_matrix()[:-1,:]
+
+# TODO just use drosolf?
+# get the spontaneous rates so we can add them back
+spont_orn = hc06.loc[hc06.index == 'spontaneous firing rate'
+        ].as_matrix().flatten()
+
+# recover actual firing rates (in the 500ms binning windows)
+# TODO maybe keep it as a df?
+orn = np.empty_like(delta_orn) * np.nan
+
+# TODO numpy way to do this broadcasting?
+
+# for each odor add the spontaneous rates to the difference observed for that
+# odor adds the vector of spontaneous rates across all receptors to the odor
+# specific
+# vector of reponses across receptors
+for i in range(delta_orn.shape[0]):
+    orn[i,:] = delta_orn[i,:] + spont_orn
+
+# It seems that what Luo et al do is set anything here that would go below zero
+# to zero, but that might be wrong. Read more carefully, but they might not say.
+orn[orn < 0] = 0
+orn_matrix_title = 'Average ORN responses'
+matrix_plot(orn, title=orn_matrix_title, luo_style=True)
+matrix_plot(orn, title=orn_matrix_title)
+
 
 """
 Fig 1b: simple model PN responses
 (assuming now 1 receptor -> 1 PN (class). see note above)
 """
 
+pn_xlabel = 'Cognate ORN receptor'
 # units of Hz in the paper
 # TODO is that correct here? (seems so)
+
+# the maximum firing rate for PNs (assumed equal for all)
 rmax = 165
+# in the language of the Hill equation, w/o exponent it is as a Kd dissociation
+# constant, and if it had an exponent, it would be like Ka, (Ka)^n = Kd = kd/ka
+# Ka = ligand concentration producing half occupation of binding sites
+# n > 1 ~= cooperative binding, but i guess here, it just recapitulates
+# inflection of ORN -> PN function
 sigma = 12
+m = 0.05
 
-# model PN responses with no inhibition
-pn_no_inh = rmax * orn**1.5 / (sigma**1.5 + orn**1.5)
+def pn_responses_and_plots(lateral_inhibition=True):
+    """
+    """
+    # model PN responses with no lateral inhibition
+    if lateral_inhibition:
+        # activity of any given PN is now dependent on sum of ORN activity
+        # TODO make sure this broadcasting with newaxis is working correctly
+        pn_responses = rmax * orn**1.5 / (sigma**1.5 + orn**1.5 + 
+            (m * np.sum(orn, axis=1)[:,np.newaxis])**1.5)
 
-# TODO add noise a la methods
+        # TODO make less verbose? remove "Average"?
+        pn_matrix_title = ('Average model PN responses (with lateral' +
+            'inhibition)')
 
-# TODO make a function out of me. maybe subplot?
-fig2 = plt.figure()
-ax2 = fig2.add_subplot(111)
+    else:
+        pn_responses = rmax * orn**1.5 / (sigma**1.5 + orn**1.5)
 
-cax2 = ax2.matshow(pn_no_inh, cmap=plt.cm.viridis, aspect=0.3, vmin=cbar.vmin,
-        vmax=cbar.vmax)
+        # TODO is this PEP8? or is this a case where backslash is preferred?
+        pn_matrix_title = ('Average model PN responses (no lateral' +
+            'inhibition)')
 
-plt.title('Binned model PN responses (no global inhibition)', fontweight='bold',
-        y=1.01)
+    # TODO TODO TODO add noise a la methods (maybe more important later?)
+    # where is it introduced, again?
 
-plt.xlabel('Receptor in recorded cell', x_axes_font)
-plt.ylabel('Odorant', y_axes_font)
+    # TODO TODO it would be really nice to have a function to group two figs
+    # into a subplot..., for easier re-use of figure generating code (beyond
+    # this code)
 
-cbar2 = fig2.colorbar(cax2, shrink=0.6, aspect=30, pad=0.02)
-cbar2.set_label('Spike count change in 500ms(?) presentation', **cbar_font)
+    # the authors used "PN index", but I like this better
+    # TODO maybe alter this function to return subplots (within style)?
+    matrix_plot(pn_responses, title=pn_matrix_title, xlabel=pn_xlabel,
+        luo_style=True)
+    matrix_plot(pn_responses, title=pn_matrix_title, xlabel=pn_xlabel)
 
-# keep all columns
-# but exclude last odor label (because it is the spontaneous firing rate)
-plt.xticks(np.arange(len(hc06.columns)))
-plt.yticks(np.arange(len(hc06.index) - 1))
-ax2.set_xticklabels(hc06.columns.values, rotation='horizontal')
-ax2.xaxis.set_ticks_position('bottom')
-ax2.set_yticklabels(hc06.index.values[:-1], fontsize=6)
+    return pn_responses
+
+pn_no_inh = pn_responses_and_plots(lateral_inhibition=False)
+pn = pn_responses_and_plots()
 
 
 """
 Fig 1C - E
 """
-
-m = 0.05
-# model PN responses WITH global inhibition (dependent on sum of ORN activity)
-# TODO make sure this broadcasting with newaxis is working correctly
-pn = rmax * orn**1.5 / (sigma**1.5 + orn**1.5 + (m * np.sum(orn, axis=1)[:,
-    np.newaxis])**1.5)
 
 fig3 = plt.figure()
 #fig3.title('Mean firing rates across odors')
