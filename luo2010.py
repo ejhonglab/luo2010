@@ -8,6 +8,7 @@ from scipy import linalg
 
 from sklearn.decomposition import PCA
 
+
 # adapted from a StackOverflow answer by 'doug'
 def pca(data, components=None):
     """
@@ -20,10 +21,12 @@ def pca(data, components=None):
     #data -= data.mean(axis=0)
 
     # calculate the covariance matrix
-    # rowvar=False is equivalent to data being transposed (so output will be pxp as below)
+    # rowvar=False is equivalent to data being transposed
+    # (so output will be pxp as below)
     R = np.cov(data, rowvar=False)
 
-    assert np.allclose(np.cov(data, rowvar=False), np.cov(data - data.mean(axis=0), rowvar=False))
+    assert np.allclose(np.cov(data, rowvar=False), 
+        np.cov(data - data.mean(axis=0), rowvar=False))
 
     #print(R.diagonal().sum())
 
@@ -43,7 +46,8 @@ def pca(data, components=None):
     # D is a (pxp) diagonal matrix of eigenvalues
     # matrix V also (pxp) is made of column vectors (the *right* eigenvectors)
     # only under special conditions are the two each other's transpose
-    # but since the covariance matrix is symmetric, they are the transpose of each other
+    # but since the covariance matrix is symmetric, they are the transpose of
+    # each other
 
     # TODO manually calculate eigenvectors and compare
 
@@ -76,10 +80,12 @@ def pca(data, components=None):
     # carry out the transformation on the data using eigenvectors
     # and return the re-scaled data, eigenvalues, and eigenvectors
     # TODO HOW TO TEST WHETHER IT IS SUPPOSED TO BE EVEC OR TRANPOSE
-    # columns should be eigenvectors? can test identity, and then explicitly use same
+    # columns should be eigenvectors? can test identity, and then explicitly use
+    # same
     # columns for reconstruction?
     #return np.dot(evecs.T, data.T).T, evals, evecs
     return np.dot(data, evecs), evals, evecs
+
 
 def test_pca(data):
     '''
@@ -89,7 +95,8 @@ def test_pca(data):
     '''
     projected, _, eigenvectors = pca(data)
 
-    assert np.allclose(np.dot(eigenvectors, data.T).T, np.dot(data, eigenvectors.T))
+    assert np.allclose(np.dot(eigenvectors, data.T).T, 
+        np.dot(data, eigenvectors.T))
 
     data_recovered = np.dot(projected, np.linalg.inv(eigenvectors))
 
@@ -107,11 +114,14 @@ def test_pca(data):
     # TODO compare to premade PCA
     print(np.sum(np.abs(sk_pca.inverse_transform(sk_data) - data)))
     print(eigenvectors.shape)
-    # TODO it might be a matter of how i am inverting things (if it werent for pinv,
-    # this would not be invertible), but my error is way larger at 3 components...
-    print(np.sum(np.abs(np.dot(projected, np.linalg.pinv(eigenvectors)) - data)))
+    # TODO it might be a matter of how i am inverting things (if it werent for
+    # pinv, this would not be invertible), but my error is way larger at 3
+    # components...
+    print(np.sum(np.abs(np.dot(projected, np.linalg.pinv(eigenvectors)) 
+        - data)))
     print(sk_data - projected)
     #assert np.allclose(sk_sorn, projected)
+
 
 # prevents white lines from being overlayed over data
 sns.set_style('dark')
@@ -119,33 +129,36 @@ sns.set_style('dark')
 """
 A little bit about the Hallem and Carlson 2006 dataset:
     -each odor pulse is 500ms long (exceptions?)
-    -responses (other than spontaneous) are # of spikes in those 500ms - spontaneous
+    -responses (other than spontaneous) are # of spikes in those 500ms -
+     spontaneous
     -where spontaneous is just count in 500ms without stimulation
     -flies are <4 weeks old (but how young on average?)
     -24 ml/s carrier with 5.9 ml/s odor stream
     -female flies (??)
 
-    TODO: my interpretation of why spontaneous - diff is sometimes negative is that
-    the diff is calculated using (in at least the 2004 paper, was unclear in 2006)
-    the second (maybe 0.5 sec here) before and the second after (with 500 ms pulse
-    in their 2004 paper)
-    -if this is the case, there could just be an unusually busy period preceding the
-     stimulus, exagerating the inhibition
+    TODO: my interpretation of why spontaneous - diff is sometimes negative is
+    that the diff is calculated using (in at least the 2004 paper, was unclear
+    in 2006) the second (maybe 0.5 sec here) before and the second after (with
+    500 ms pulse in their 2004 paper)
+    -if this is the case, there could just be an unusually busy period preceding
+     the stimulus, exagerating the inhibition
 """
 
 """
 Fig 1a: raw Hallem and Carlson 2006
 """
 
-# TODO exclude pheromone (and other selective) receptors, to compare to what Luo et al
-# actually did
+# TODO exclude pheromone (and other selective) receptors, to compare to what Luo
+# et al actually did
 
-# TODO using receptor data now. mostly the same as using glomeruli data, but should perhaps
-# be using glomeruli data instead if there is overlapping expression of any of the receptors
-# in their dataset, or if any two provide input to a common set of PNs
+# TODO using receptor data now. mostly the same as using glomeruli data, but
+# should perhaps be using glomeruli data instead if there is overlapping
+# expression of any of the receptors in their dataset, or if any two provide
+# input to a common set of PNs
 
 # skip glomerulus labels, which are not assigned to each response
 # keep the receptor labels, which are assigned to each response
+# TODO just use drosolf?
 hc06 = pd.read_csv('./Hallem_Carlson_2006.csv', skiprows=1)
 
 # first column of first row manually set to this in the CSV data file
@@ -162,22 +175,24 @@ ax = fig.add_subplot(111)
 delta_orn = hc06.as_matrix()[:-1,:]
 
 # get the spontaneous rates so we can add them back
-spont_orn = hc06.loc[hc06.index == 'spontaneous firing rate'].as_matrix().flatten()
+spont_orn = hc06.loc[hc06.index == 'spontaneous firing rate'
+        ].as_matrix().flatten()
 
 # recover actual firing rates (in the 500ms binning windows)
 orn = np.empty_like(delta_orn) * np.nan
 
 # TODO numpy way to do this broadcasting?
 
-# for each odor add the spontaneous rates to the difference observed for that odor
-# adds the vector of spontaneous rates across all receptors to the odor specific
+# for each odor add the spontaneous rates to the difference observed for that
+# odor adds the vector of spontaneous rates across all receptors to the odor
+# specific
 # vector of reponses across receptors
 for i in range(delta_orn.shape[0]):
     orn[i,:] = delta_orn[i,:] + spont_orn
 
 """
-It seems that what Luo et al do is set anything here that would go below zero to zero,
-but that might be wrong. Read more carefully, but they might not say.
+It seems that what Luo et al do is set anything here that would go below zero to
+zero, but that might be wrong. Read more carefully, but they might not say.
 """
 orn[orn < 0] = 0
 
@@ -219,7 +234,8 @@ ax.xaxis.set_ticks_position('bottom')
 ax.set_yticklabels(hc06.index.values[:-1], fontsize=6)
 
 """
-Fig 1b: simple model PN responses (assuming now 1 receptor -> 1 PN (class). see note above)
+Fig 1b: simple model PN responses
+(assuming now 1 receptor -> 1 PN (class). see note above)
 """
 
 # units of Hz in the paper
@@ -236,9 +252,11 @@ pn_no_inh = rmax * orn**1.5 / (sigma**1.5 + orn**1.5)
 fig2 = plt.figure()
 ax2 = fig2.add_subplot(111)
 
-cax2 = ax2.matshow(pn_no_inh, cmap=plt.cm.viridis, aspect=0.3, vmin=cbar.vmin, vmax=cbar.vmax)
+cax2 = ax2.matshow(pn_no_inh, cmap=plt.cm.viridis, aspect=0.3, vmin=cbar.vmin,
+        vmax=cbar.vmax)
 
-plt.title('Binned model PN responses (no global inhibition)', fontweight='bold', y=1.01)
+plt.title('Binned model PN responses (no global inhibition)', fontweight='bold',
+        y=1.01)
 
 plt.xlabel('Receptor in recorded cell', x_axes_font)
 plt.ylabel('Odorant', y_axes_font)
@@ -261,7 +279,8 @@ Fig 1C - E
 m = 0.05
 # model PN responses WITH global inhibition (dependent on sum of ORN activity)
 # TODO make sure this broadcasting with newaxis is working correctly
-pn = rmax * orn**1.5 / (sigma**1.5 + orn**1.5 + (m * np.sum(orn, axis=1)[:, np.newaxis])**1.5)
+pn = rmax * orn**1.5 / (sigma**1.5 + orn**1.5 + (m * np.sum(orn, axis=1)[:,
+    np.newaxis])**1.5)
 
 fig3 = plt.figure()
 #fig3.title('Mean firing rates across odors')
@@ -275,7 +294,8 @@ plt.ylabel('Firing rate (spikes/s)')
 # this overall activity just seemed to high because i didn't yet normalize
 a2 = plt.subplot(132)
 pn_no_inh_mean = np.mean(pn_no_inh, axis=1)
-plt.plot(np.arange(pn_no_inh.shape[0]), pn_no_inh_mean / np.mean(pn_no_inh_mean), '.')
+plt.plot(np.arange(pn_no_inh.shape[0]), pn_no_inh_mean /
+    np.mean(pn_no_inh_mean), '.')
 plt.title('PN (no inhibition)')
 a2.yaxis.set_ticklabels([])
 plt.xlabel('Odor')
@@ -296,13 +316,14 @@ for a in axs:
 
 """
 Fig 1F - H: skree plots of principal components of odor responses
-skree plot = % variance "explained" as a function of the principal component number
+skree plot = % variance "explained" as a function of the principal component
+number
 
-Note: they say "percentage of variances from a PCA analysis of the response used in C-E"
-which seems to mean of the average responses. It is unclear that this is meaningful, as
-apart from normalizing in the antennal lobe, the sum of the ORN response is not really
-what is important. Is the sum of the PN response very important, or always held approx
-constant?
+Note: they say "percentage of variances from a PCA analysis of the response used
+in C-E" which seems to mean of the average responses. It is unclear that this is
+meaningful, as apart from normalizing in the antennal lobe, the sum of the ORN
+response is not really what is important. Is the sum of the PN response very
+important, or always held approx constant?
 
 I guess they are treating odors as observations?
 
@@ -314,13 +335,13 @@ snlpn, nlpn_eval, nlpn_evec = pca(pn_no_inh)
 spn, pn_eval, pn_evec = pca(pn)
 
 """
-"PCA replaces original variables with new variables, called principal components, 
- which are orthogonal (i.e. they have zero covariations) and have variances
- (called eigenvalues)..."
+"PCA replaces original variables with new variables, called principal
+ components, which are orthogonal (i.e. they have zero covariations) and have
+ variances (called eigenvalues)..."
 
- The diagonal sums of original covariance matrix and covariance matrix of PCs, a diagonal matrix,
- are equal. This quantity is called the 'total variability.' Off-diagonal sum of covariance matrix
- is of course not guaranteed to be zero.
+ The diagonal sums of original covariance matrix and covariance matrix of PCs, a
+ diagonal matrix, are equal. This quantity is called the 'total variability.'
+ Off-diagonal sum of covariance matrix is of course not guaranteed to be zero.
 """
 
 '''
@@ -352,15 +373,19 @@ print(np.linalg.norm(sk_pca.components_))
 
 print(orn_eval)
 print(sk_pca.explained_variance_)
-# Verdict: close, but always off a little bit. usually after 2 significant digits.
-# seems low by typical computer standards though... what explains the difference?
+# Verdict: close, but always off a little bit. usually after 2 significant
+# digits.  seems low by typical computer standards though... what explains the
+# difference?
 
 # works just fine
 # assert np.allclose(sk_pca.inverse_transform(sk_sorn), orn)
 
-# PCA should maintain the total variance after change of basis to that of the eigenvectors
-assert np.isclose(np.cov(orn.T).diagonal().sum(), np.cov(sorn.T).diagonal().sum())
-assert np.isclose(np.cov(pn_no_inh.T).diagonal().sum(), np.cov(snlpn.T).diagonal().sum())
+# PCA should maintain the total variance after change of basis to that of the
+# eigenvectors
+assert np.isclose(np.cov(orn.T).diagonal().sum(),
+    np.cov(sorn.T).diagonal().sum())
+assert np.isclose(np.cov(pn_no_inh.T).diagonal().sum(),
+    np.cov(snlpn.T).diagonal().sum())
 assert np.isclose(np.cov(pn.T).diagonal().sum(), np.cov(spn.T).diagonal().sum())
 
 # and off diagonal elements should be zero
@@ -401,7 +426,8 @@ Fig 4: Model KC responses
 """
 
 """
-Fig 5: Effect of feedforward nonlinearity and lateral suppression on LHN and KC responses.
+Fig 5: Effect of feedforward nonlinearity and lateral suppression on LHN and KC
+responses.
 """
 
 
