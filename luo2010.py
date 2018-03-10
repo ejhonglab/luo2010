@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
 from scipy import linalg 
-
 from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
 
 
 # adapted from a StackOverflow answer by 'doug'
@@ -272,6 +271,7 @@ ax2.set_xticklabels(hc06.columns.values, rotation='horizontal')
 ax2.xaxis.set_ticks_position('bottom')
 ax2.set_yticklabels(hc06.index.values[:-1], fontsize=6)
 
+
 """
 Fig 1C - E
 """
@@ -313,6 +313,7 @@ ymax = max([max(a.get_ylim()) for a in axs])
 for a in axs:
     a.set_ylim(0, ymax)
     a.xaxis.set_ticklabels([])
+
 
 """
 Fig 1F - H: skree plots of principal components of odor responses
@@ -413,22 +414,27 @@ plt.plot(nlpn_eval / nlpn_eval.sum(), '.')
 plt.subplot(133)
 plt.plot(pn_eval / pn_eval.sum(), '.')
 
+
 """
 Fig 2: Responses of model LHNs
 """
+
 
 """
 Fig 3: Model KC responses
 """
 
+
 """
 Fig 4: Model KC responses
 """
+
 
 """
 Fig 5: Effect of feedforward nonlinearity and lateral suppression on LHN and KC
 responses.
 """
+
 
 
 
