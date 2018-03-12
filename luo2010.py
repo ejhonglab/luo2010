@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
+import ipdb
+
 
 # adapted from a StackOverflow answer by 'doug'
 def pca(data, components=None):
@@ -163,6 +165,10 @@ hc06 = pd.read_csv('./Hallem_Carlson_2006.csv', skiprows=1)
 # might want to use more pandonic way of doing this
 hc06 = hc06.set_index(['odor'])
 hc06.columns.name = 'receptor'
+# TODO remove receptors Or33b, Or47b, Or65a, and Or88a (pheromone receptors) as
+# in paper
+n_pns = len(hc06.columns)
+n_odors = len(hc06.index) - 1
 
 axes_font_size = 10
 axes_font_weight = 'demi'
@@ -237,8 +243,10 @@ def matrix_plot(mat, title='', xlabel='ORN receptor', luo_style=False):
     else:
         # keep all columns, but exclude last odor label
         # (because it is the spontaneous firing rate)
-        plt.xticks(np.arange(len(hc06.columns)))
-        plt.yticks(np.arange(len(hc06.index) - 1))
+        # TODO don't hardcode these values if this function is going to have
+        # application beyond ORN / PN data
+        plt.xticks(np.arange(n_pns))
+        plt.yticks(np.arange(n_odors))
         # TODO make sure label order is correct / matshow directly for df?
         ax.set_xticklabels(hc06.columns.values, rotation='horizontal')
         ax.set_yticklabels(hc06.index.values[:-1], fontsize=6)
@@ -309,14 +317,14 @@ def pn_responses_and_plots(lateral_inhibition=True):
             (m * np.sum(orn, axis=1)[:,np.newaxis])**1.5)
 
         # TODO make less verbose? remove "Average"?
-        pn_matrix_title = ('Average model PN responses (with lateral' +
+        pn_matrix_title = ('Average model PN responses (with lateral ' +
             'inhibition)')
 
     else:
         pn_responses = rmax * orn**1.5 / (sigma**1.5 + orn**1.5)
 
         # TODO is this PEP8? or is this a case where backslash is preferred?
-        pn_matrix_title = ('Average model PN responses (no lateral' +
+        pn_matrix_title = ('Average model PN responses (no lateral ' +
             'inhibition)')
 
     # TODO TODO TODO add noise a la methods (maybe more important later?)
@@ -389,6 +397,8 @@ important, or always held approx constant?
 I guess they are treating odors as observations?
 
 """
+# TODO if i don't find code for these plots on old desktop, at least fix
+# scale on skree plots (same scale on all). that might be only difference.
 
 # 're-scaled' data, eigenvalues, and eigenvectors
 sorn, orn_eval, orn_evec = pca(orn)
@@ -475,6 +485,22 @@ plt.subplot(133)
 plt.plot(pn_eval / pn_eval.sum(), '.')
 
 
+# TODO should i use the noisy PN responses for PN response plot too? seed? for
+# all subsequent transformations?
+# described in Methods section of main text
+# see: Sensory processing in the Drosophila antennal lobe increases the
+# reliability and separability of ensemble odor representations (Bhandawhat et
+# al., 2007) for possible justification
+sigma_pn_noise_hz = 10
+alpha_pn_noise_hz = 0.025
+
+# TODO why this function? what the deterministic part of tanh term look like?
+# they didn't say the noise was normal, they just said zero mean and unit
+# variance, but i assumed
+# r_pn in their equations (after transformation to add noise)
+noisy_pn = pn + (sigma_pn_noise_hz * np.tanh(alpha_pn_noise_hz * pn) *
+    np.random.normal(loc=0.0, scale=1.0, size=pn.shape))
+
 """
 Fig 2: Responses of model LHNs
 
@@ -490,8 +516,106 @@ LHNs can be constructed.'
 """
 Fig 3: Model KC responses
 """
+# from methods: "we chose the n synaptic connections for the KCs randomly and
+# drew their weights, denoted by the vector w, from a uniform distribution
+# between 0 and 1."
+# TODO maybe make this more accurate, using information from subsequent studies?
+# some stuff that could help exists, right?
+n_kcs = 2500
+print('n_pns:', n_pns)
+print(pn.shape)
+n_pns_per_kc = 5
+# TODO w/ replacement or not? need diff function to do w/o replacement?
+nonzero_weights = np.random.randint(n_pns, size=(n_kcs, n_pns_per_kc))
+# w in their equations (transposed?)
+pn_to_kc_weights = np.zeros((n_kcs, n_pns))
+#pn_to_kc_weights[nonzero_weights] = np.random.uniform(
+#    size=nonzero_weights.shape)
+
+# Sampling glomeruli WITH REPLACEMENT. Not obvious whether Luo et al. sample
+# with replacement or not.
+counts = dict()
+# TODO how to vectorize this?
+for k in range(n_kcs):
+    distinct_pn_inputs = set()
+    for i in range(n_pns_per_kc):
+        # so that if we same from the same glomerulus twice, we increase the
+        # weight
+        pn_to_kc_weights[k, nonzero_weights[k,i]] += np.random.uniform()
+        distinct_pn_inputs.add(nonzero_weights[k,i])
+
+    n_distinct_inputs = len(distinct_pn_inputs)
+    if n_distinct_inputs in counts:
+        counts[n_distinct_inputs] += 1
+    else:
+        counts[n_distinct_inputs] = 1
+print('counts:', counts)
+
+# same?
+'''
+pn_to_kc_weights2 = np.zeros((n_kcs, n_pns))
+for i in range(n_pns_per_kc):
+    pn_to_kc_weights2[:, nonzero_weights[:,i]] = 
+'''
+
+# from SI: (.T to indicate transpose, * for matrix multiplication)
+# "the total KC input in our model is I=W.T * r_pn - v * r_in, with r_in the
+# firing rate of one or more globally acting interneurons connected to each KC
+# through a synapse of strength v and driven by PNs through synapses W_in.T so
+# that r_in = W_in.T * r_pn. Defining r_hat = <r_pn> / |<r_pn>|, where the
+# brackets denote an average across odors, we set v = W.T * r_hat and W_in =
+# r_hat. Then,
+# I = W.T * r_pn - v * r_in = W.T * (r_pn - (r_hat.T * r_pn) * r_hat),
+# which removes the projection of the PN rates along the direction of their
+# mean. Note that if we average over all odors,
+# <I> = W.T * <r_pn> - v * <r_in> = 0"
+# TODO is that last consequence (just above) sensible?
+# TODO is this really subtracting first PC?
+# TODO is this model totally linear? (i guess this is all before some
+# threshold?)
+
+# seems more consistent w/ their notation?
+noisy_pn = noisy_pn.T
+
+# r_hat in their equations
+odor_averaged_pn_responses = np.mean(noisy_pn, axis=1)
+assert len(odor_averaged_pn_responses.shape) == 1
+assert odor_averaged_pn_responses.shape[0] == n_pns
+
+# TODO is their denominator definitely this norm? probably?
+normalized_pn_responses = (odor_averaged_pn_responses /
+    np.linalg.norm(odor_averaged_pn_responses))
+
+print('normalized_pn_responses.shape:', normalized_pn_responses.shape)
+# w_in (transposed?) in their equations
+pn_to_inh_weights = normalized_pn_responses
+# r_in in their equations
+inhibitory_neurons_activation = np.dot(pn_to_inh_weights, noisy_pn)
+# v in their equations
+# TODO correct? scalar or not?
+inhibition_strength = np.dot(pn_to_kc_weights, normalized_pn_responses)
+print('inhibition_strength.shape:', inhibition_strength.shape)
+print('inhibitory_neurons_activation.shape:',
+    inhibitory_neurons_activation.shape)
+
+kc_activation = (np.dot(pn_to_kc_weights, noisy_pn) - 
+    np.dot(inhibition_strength, inhibitory_neurons_activation))
+
+# checking this equals their equivalent form, largely to gaurd against
+# having made dimension mismatch errors
+assert kc_activation == np.dot(pn_to_kc_weights, (noisy_pn -
+    np.dot(np.dot(odor_averaged_pn_responses.T, noisy_pn),
+    odor_averaged_pn_responses)))
+
+odor_averaged_kc_activation = np.mean(kc_activation, axis=1)
+assert len(odor_averaged_kc_activations.shape) == 1
+assert odor_averaged_kc_activation.shape[0] == n_kcs
+# their assertion (do algebra to get this consequence)
+assert np.allclose(odor_averaged_kc_activation, 0.0)
+
 # 3A: response probabilities of model KCs, each receiving input from n PNs and
 # global inhibition
+
 
 # 3B: the number of missed odors as a function of # of PNs each KC receives
 # input from
