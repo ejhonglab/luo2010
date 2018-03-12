@@ -10,6 +10,8 @@ import seaborn as sns
 import ipdb
 
 
+numpy.random.seed(hash('olfaction'))
+
 # adapted from a StackOverflow answer by 'doug'
 def pca(data, components=None):
     """
@@ -187,6 +189,8 @@ cbar_font = {'fontsize': axes_font_size ,
              'verticalalignment': 'top',
              'horizontalalignment': 'center'}
 
+# TODO flag for subsequent plots? how many times am i gonna have to do this?
+# wrap a somewhat lower level function?
 def matrix_plot(mat, title='', xlabel='ORN receptor', luo_style=False):
     """
     Args:
@@ -581,40 +585,65 @@ noisy_pn = noisy_pn.T
 odor_averaged_pn_responses = np.mean(noisy_pn, axis=1)
 assert len(odor_averaged_pn_responses.shape) == 1
 assert odor_averaged_pn_responses.shape[0] == n_pns
+odor_averaged_pn_responses = np.expand_dims(odor_averaged_pn_responses, axis=1)
+#print(odor_averaged_pn_responses)
+#print(odor_averaged_pn_responses.shape)
 
 # TODO is their denominator definitely this norm? probably?
 normalized_pn_responses = (odor_averaged_pn_responses /
     np.linalg.norm(odor_averaged_pn_responses))
+#print('normalized_pn_responses.shape:', normalized_pn_responses.shape)
 
-print('normalized_pn_responses.shape:', normalized_pn_responses.shape)
 # w_in (transposed?) in their equations
 pn_to_inh_weights = normalized_pn_responses
+#print('pn_to_inh_weights.shape:', pn_to_inh_weights.shape)
+
+#print('noisy_pn.shape:', noisy_pn.shape)
 # r_in in their equations
-inhibitory_neurons_activation = np.dot(pn_to_inh_weights, noisy_pn)
+inhibitory_neurons_activation = np.dot(pn_to_inh_weights.T, noisy_pn)
+#print('inhibitory_neurons_activation.shape:',
+#    inhibitory_neurons_activation.shape)
+
+#print('pn_to_kc_weights.shape:', pn_to_kc_weights.shape)
 # v in their equations
 # TODO correct? scalar or not?
 inhibition_strength = np.dot(pn_to_kc_weights, normalized_pn_responses)
-print('inhibition_strength.shape:', inhibition_strength.shape)
-print('inhibitory_neurons_activation.shape:',
-    inhibitory_neurons_activation.shape)
+#print('inhibition_strength.shape:', inhibition_strength.shape)
+
+synonym_kc_activation = np.dot(pn_to_kc_weights, (noisy_pn -
+    np.dot(np.dot(odor_averaged_pn_responses.T, noisy_pn).T,
+    odor_averaged_pn_responses.T).T))
 
 kc_activation = (np.dot(pn_to_kc_weights, noisy_pn) - 
     np.dot(inhibition_strength, inhibitory_neurons_activation))
 
 # checking this equals their equivalent form, largely to gaurd against
 # having made dimension mismatch errors
-assert kc_activation == np.dot(pn_to_kc_weights, (noisy_pn -
-    np.dot(np.dot(odor_averaged_pn_responses.T, noisy_pn),
-    odor_averaged_pn_responses)))
+print(kc_activation.shape)
+print(synonym_kc_activation.shape)
+
+print(kc_activation[0,:])
+print(synonym_kc_activation[0,:])
+
+print(kc_activation[-1,:])
+print(synonym_kc_activation[-1,:])
+# TODO recheck above math. identify errors.
+#assert np.allclose(kc_activation, synonym_kc_activation)
+
+# my original attempt:
+#np.dot(pn_to_kc_weights, (noisy_pn -
+#    np.dot(np.dot(odor_averaged_pn_responses.T, noisy_pn),
+#    odor_averaged_pn_responses)))
 
 odor_averaged_kc_activation = np.mean(kc_activation, axis=1)
-assert len(odor_averaged_kc_activations.shape) == 1
+assert len(odor_averaged_kc_activation.shape) == 1
 assert odor_averaged_kc_activation.shape[0] == n_kcs
 # their assertion (do algebra to get this consequence)
 assert np.allclose(odor_averaged_kc_activation, 0.0)
 
 # 3A: response probabilities of model KCs, each receiving input from n PNs and
 # global inhibition
+
 
 
 # 3B: the number of missed odors as a function of # of PNs each KC receives
