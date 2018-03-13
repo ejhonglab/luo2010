@@ -10,7 +10,20 @@ import seaborn as sns
 import ipdb
 
 
-numpy.random.seed(hash('olfaction'))
+sample_pns_with_replacement = True
+# if True, does not add the noise they added in the paper
+deterministic = False
+# number of trials used to generate "response probability" plots
+# am i misunderstanding?
+simulated_trials = 1000
+exclude_pheromone_receptors = False
+
+
+if (deterministic or not sample_pns_with_replacement or
+    exclude_pheromone_receptors):
+    raise NotImplementedError
+
+np.random.seed(1118)
 
 # adapted from a StackOverflow answer by 'doug'
 def pca(data, components=None):
@@ -189,9 +202,41 @@ cbar_font = {'fontsize': axes_font_size ,
              'verticalalignment': 'top',
              'horizontalalignment': 'center'}
 
+
+def matrix_plot(mat, title='', xlabel='', ylabel='', matrix_aspect='auto',
+    cmap=plt.cm.viridis, cbar_label='', xtickstep=None, ytickstep=None):
+    """
+    Args:
+        xtickstep (int):
+        ytickstep (int): 
+    """
+
+    fig = plt.figure()
+    # the 111 means "1x1 grid, first subplot"
+    # TODO still necessary?
+    ax = fig.add_subplot(111)
+    cax = ax.matshow(mat, cmap=cmap, aspect=matrix_aspect) #aspect='auto')
+    plt.title(title, fontweight='bold', y=1.01)
+    plt.xlabel(xlabel, x_axes_font)
+    plt.ylabel(ylabel, y_axes_font)
+
+    # TODO don't hardcode these values if this function is going to have
+    # application beyond ORN / PN data
+    if not xtickstep is None:
+        plt.xticks(range(20, mat.shape[1], xtickstep))
+
+    if not ytickstep is None:
+        plt.yticks(range(2, mat.shape[0], ytickstep))
+
+    cbar = fig.colorbar(cax, shrink=0.6, aspect=30, pad=0.02)
+    ax.xaxis.set_ticks_position('bottom')
+    cbar.set_label(cbar_label, **cbar_font)
+    return fig, ax
+
+
 # TODO flag for subsequent plots? how many times am i gonna have to do this?
 # wrap a somewhat lower level function?
-def matrix_plot(mat, title='', xlabel='ORN receptor', luo_style=False):
+def orn_pn_matrix(mat, title='', xlabel='ORN receptor', luo_style=False):
     """
     Args:
         luo_style (defaults to False): If True, uses jet(-like) color map and is
@@ -200,68 +245,101 @@ def matrix_plot(mat, title='', xlabel='ORN receptor', luo_style=False):
         If False, will use a more perceptually flat color map and display
         transposed, to be able to read the odor names. (reading glomeruli
         easier?)
+        TODO correct. transposing in other case
     """
-    fig = plt.figure()
-    # the 111 means "1x1 grid, first subplot"
-    ax = fig.add_subplot(111)
-
     if luo_style:
-        # TODO better one? full range?
-        cmap = plt.cm.jet
+        # TODO does this interfere w/ downstream functions (value passed in)?
+        # test.
         mat = mat.T
-        ylabel = 'Odor Index'
-        matrix_aspect = 'auto' # 1?
+        options = {
+            'cmap': plt.cm.jet,
+            'ylabel': 'Odor Index',
+            'matrix_aspect': 'auto',
+            'xtickstep': 20,
+            'ytickstep': 2,
+            'cbar_label': 'Firing Rate (Hz)'
+        }
 
     else:
-        cmap = plt.cm.viridis
-        ylabel = 'Odor'
-        matrix_aspect = 0.3
+        options = {
+            'cmap': plt.cm.viridis,
+            'ylabel': 'Odor',
+            'matrix_aspect': 0.3,
+            'cbar_label': 'Spike count change in 500ms(?) presentation'
+        }
         # TODO should make x-axis font small enough that there is no overlapping
         # text
 
     # TODO why was fig2's cax also getting vmin=cbar.vim and vmax=cbar.vmax
     # args? (for fig1's cbar)
-    # TODO way to get these values in advance, to have plotting of these two be
+    # TODO way to get those values in advance, to have plotting of these two be
     # totally independent, for code re-use? (fig1 cbar.vim and cbar.vmax)
     # (if necessary...)
 
-    # TODO may need to change aspect for luo_style=True
-    cax = ax.matshow(mat, cmap=cmap, aspect=matrix_aspect) #aspect='auto')
+    _, ax = matrix_plot(mat, title=title, **options)
 
-    plt.title(title, fontweight='bold', y=1.01)
-    plt.xlabel(xlabel, x_axes_font)
-    plt.ylabel(ylabel, y_axes_font)
-
-    cbar = fig.colorbar(cax, shrink=0.6, aspect=30, pad=0.02)
-    cbar.set_label('Spike count change in 500ms(?) presentation', **cbar_font)
-
-    ax.xaxis.set_ticks_position('bottom')
-    if luo_style:
-        xstep = 20
-        ystep = 2
-        plt.xticks(range(20, mat.shape[1], xstep))
-        plt.yticks(range(2, mat.shape[0], ystep))
-        cbar.set_label('Firing Rate (Hz)',
-            **cbar_font)
-
-    else:
+    if not luo_style:
         # keep all columns, but exclude last odor label
         # (because it is the spontaneous firing rate)
-        # TODO don't hardcode these values if this function is going to have
-        # application beyond ORN / PN data
         plt.xticks(np.arange(n_pns))
         plt.yticks(np.arange(n_odors))
         # TODO make sure label order is correct / matshow directly for df?
         ax.set_xticklabels(hc06.columns.values, rotation='horizontal')
         ax.set_yticklabels(hc06.index.values[:-1], fontsize=6)
 
-        cbar.set_label('Spike count change in 500ms(?) presentation',
-            **cbar_font)
 
+def kc_matrix(mat, title='', xlabel='ORN receptor', luo_style=False):
+    """
+    Args:
+        luo_style (defaults to False): If True, uses jet(-like) color map and is
+        displayed with odor varying along the horizontal axis.
+
+        If False, will use a more perceptually flat color map and display
+        transposed, to be able to read the odor names.
+        TODO correct. transposing in other case
+    """
+    if luo_style:
+        # TODO does this interfere w/ downstream functions (value passed in)?
+        # test.
+        mat = mat.T
+        options = {
+            'cmap': plt.cm.jet,
+            'ylabel': 'Odor Index',
+            'matrix_aspect': 'auto',
+            'xtickstep': 20,
+            'ytickstep': 2,
+            'cbar_label': 'Firing Rate (Hz)'
+        }
+
+    else:
+        options = {
+            'cmap': plt.cm.viridis,
+            'ylabel': 'Odor',
+            'matrix_aspect': 0.3,
+            'cbar_label': 'Spike count change in 500ms(?) presentation'
+        }
+        # TODO should make x-axis font small enough that there is no overlapping
+        # text
+
+    # TODO why was fig2's cax also getting vmin=cbar.vim and vmax=cbar.vmax
+    # args? (for fig1's cbar)
+    # TODO way to get those values in advance, to have plotting of these two be
+    # totally independent, for code re-use? (fig1 cbar.vim and cbar.vmax)
+    # (if necessary...)
+
+    _, ax = matrix_plot(mat, title=title, **options)
+
+    if not luo_style:
+        # keep all columns, but exclude last odor label
+        # (because it is the spontaneous firing rate)
+        plt.xticks(np.arange(n_pns))
+        plt.yticks(np.arange(n_odors))
+        # TODO make sure label order is correct / matshow directly for df?
+        ax.set_xticklabels(hc06.columns.values, rotation='horizontal')
+        ax.set_yticklabels(hc06.index.values[:-1], fontsize=6)
 """
 Fig 1a: raw Hallem and Carlson 2006
 """
-
 # exclude the last row, because those are spontaneous firing rates
 delta_orn = hc06.as_matrix()[:-1,:]
 
@@ -287,8 +365,8 @@ for i in range(delta_orn.shape[0]):
 # to zero, but that might be wrong. Read more carefully, but they might not say.
 orn[orn < 0] = 0
 orn_matrix_title = 'Average ORN responses'
-matrix_plot(orn, title=orn_matrix_title, luo_style=True)
-matrix_plot(orn, title=orn_matrix_title)
+orn_pn_matrix(orn, title=orn_matrix_title, luo_style=True)
+orn_pn_matrix(orn, title=orn_matrix_title)
 
 
 """
@@ -340,9 +418,9 @@ def pn_responses_and_plots(lateral_inhibition=True):
 
     # the authors used "PN index", but I like this better
     # TODO maybe alter this function to return subplots (within style)?
-    matrix_plot(pn_responses, title=pn_matrix_title, xlabel=pn_xlabel,
+    orn_pn_matrix(pn_responses, title=pn_matrix_title, xlabel=pn_xlabel,
         luo_style=True)
-    matrix_plot(pn_responses, title=pn_matrix_title, xlabel=pn_xlabel)
+    orn_pn_matrix(pn_responses, title=pn_matrix_title, xlabel=pn_xlabel)
 
     return pn_responses
 
@@ -489,21 +567,32 @@ plt.subplot(133)
 plt.plot(pn_eval / pn_eval.sum(), '.')
 
 
-# TODO should i use the noisy PN responses for PN response plot too? seed? for
-# all subsequent transformations?
-# described in Methods section of main text
-# see: Sensory processing in the Drosophila antennal lobe increases the
-# reliability and separability of ensemble odor representations (Bhandawhat et
-# al., 2007) for possible justification
-sigma_pn_noise_hz = 10
-alpha_pn_noise_hz = 0.025
+# TODO move down?
+def noisy_pns(trials=1):
+    """
+    """
+    # TODO use trials to return tensor of activations, for vectorizing whole
+    # simulation
+    if trials != 1:
+        raise NotImplementedError
 
-# TODO why this function? what the deterministic part of tanh term look like?
-# they didn't say the noise was normal, they just said zero mean and unit
-# variance, but i assumed
-# r_pn in their equations (after transformation to add noise)
-noisy_pn = pn + (sigma_pn_noise_hz * np.tanh(alpha_pn_noise_hz * pn) *
-    np.random.normal(loc=0.0, scale=1.0, size=pn.shape))
+    # TODO should i use the noisy PN responses for PN response plot too? seed?
+    # for all subsequent transformations?
+    # described in Methods section of main text
+    # see: Sensory processing in the Drosophila antennal lobe increases the
+    # reliability and separability of ensemble odor representations (Bhandawhat
+    # et al., 2007) for possible justification
+    sigma_pn_noise_hz = 10
+    alpha_pn_noise_hz = 0.025
+
+    # TODO why this function? what the deterministic part of tanh term look
+    # like?
+    # they didn't say the noise was normal, they just said zero mean and unit
+    # variance, but i assumed
+    # r_pn in their equations (after transformation to add noise)
+    # some experimental justification for this noise distribution?
+    return (pn + (sigma_pn_noise_hz * np.tanh(alpha_pn_noise_hz * pn) *
+        np.random.normal(loc=0.0, scale=1.0, size=pn.shape))).T
 
 """
 Fig 2: Responses of model LHNs
@@ -525,6 +614,7 @@ Fig 3: Model KC responses
 # between 0 and 1."
 # TODO maybe make this more accurate, using information from subsequent studies?
 # some stuff that could help exists, right?
+# TODO break into function? maybe just when i copy into drosolf
 n_kcs = 2500
 print('n_pns:', n_pns)
 print(pn.shape)
@@ -535,6 +625,9 @@ nonzero_weights = np.random.randint(n_pns, size=(n_kcs, n_pns_per_kc))
 pn_to_kc_weights = np.zeros((n_kcs, n_pns))
 #pn_to_kc_weights[nonzero_weights] = np.random.uniform(
 #    size=nonzero_weights.shape)
+
+# TODO do different trials of theirs only differ with the activity of the PNs,
+# or do they also re-draw the PN inputs to the KCs?
 
 # Sampling glomeruli WITH REPLACEMENT. Not obvious whether Luo et al. sample
 # with replacement or not.
@@ -578,73 +671,122 @@ for i in range(n_pns_per_kc):
 # TODO is this model totally linear? (i guess this is all before some
 # threshold?)
 
-# seems more consistent w/ their notation?
-noisy_pn = noisy_pn.T
+# TODO TODO vectorize to include a trials dimension for these calculations, if
+# possible
 
-# r_hat in their equations
-odor_averaged_pn_responses = np.mean(noisy_pn, axis=1)
-assert len(odor_averaged_pn_responses.shape) == 1
-assert odor_averaged_pn_responses.shape[0] == n_pns
-odor_averaged_pn_responses = np.expand_dims(odor_averaged_pn_responses, axis=1)
-#print(odor_averaged_pn_responses)
-#print(odor_averaged_pn_responses.shape)
+# TODO probably turn this into a function like noisy_pns
+kc_activation_trials = []
+for t in range(simulated_trials):
+    noisy_pn = noisy_pns()
+    #print('noisy_pn.shape:', noisy_pn.shape)
 
-# TODO is their denominator definitely this norm? probably?
-normalized_pn_responses = (odor_averaged_pn_responses /
-    np.linalg.norm(odor_averaged_pn_responses))
-#print('normalized_pn_responses.shape:', normalized_pn_responses.shape)
+    # r_hat in their equations
+    odor_averaged_pn_responses = np.mean(noisy_pn, axis=1)
+    if t == 0:
+        assert len(odor_averaged_pn_responses.shape) == 1
+        assert odor_averaged_pn_responses.shape[0] == n_pns
 
-# w_in (transposed?) in their equations
-pn_to_inh_weights = normalized_pn_responses
-#print('pn_to_inh_weights.shape:', pn_to_inh_weights.shape)
+    odor_averaged_pn_responses = np.expand_dims(odor_averaged_pn_responses,
+        axis=1)
+    #print(odor_averaged_pn_responses)
+    #print(odor_averaged_pn_responses.shape)
 
-#print('noisy_pn.shape:', noisy_pn.shape)
-# r_in in their equations
-inhibitory_neurons_activation = np.dot(pn_to_inh_weights.T, noisy_pn)
-#print('inhibitory_neurons_activation.shape:',
-#    inhibitory_neurons_activation.shape)
+    # TODO is their denominator definitely this norm? probably?
+    normalized_pn_responses = (odor_averaged_pn_responses /
+        np.linalg.norm(odor_averaged_pn_responses))
+    #print('normalized_pn_responses.shape:', normalized_pn_responses.shape)
 
-#print('pn_to_kc_weights.shape:', pn_to_kc_weights.shape)
-# v in their equations
-# TODO correct? scalar or not?
-inhibition_strength = np.dot(pn_to_kc_weights, normalized_pn_responses)
-#print('inhibition_strength.shape:', inhibition_strength.shape)
+    # w_in (transposed?) in their equations
+    pn_to_inh_weights = normalized_pn_responses
+    #print('pn_to_inh_weights.shape:', pn_to_inh_weights.shape)
 
-synonym_kc_activation = np.dot(pn_to_kc_weights, (noisy_pn -
-    np.dot(np.dot(odor_averaged_pn_responses.T, noisy_pn).T,
-    odor_averaged_pn_responses.T).T))
+    # r_in in their equations
+    inhibitory_neurons_activation = np.dot(pn_to_inh_weights.T, noisy_pn)
+    #print('inhibitory_neurons_activation.shape:',
+    #    inhibitory_neurons_activation.shape)
 
-kc_activation = (np.dot(pn_to_kc_weights, noisy_pn) - 
-    np.dot(inhibition_strength, inhibitory_neurons_activation))
+    #print('pn_to_kc_weights.shape:', pn_to_kc_weights.shape)
+    # v in their equations
+    # TODO correct? scalar or not?
+    inhibition_strength = np.dot(pn_to_kc_weights, normalized_pn_responses)
+    #print('inhibition_strength.shape:', inhibition_strength.shape)
 
-# checking this equals their equivalent form, largely to gaurd against
-# having made dimension mismatch errors
-print(kc_activation.shape)
-print(synonym_kc_activation.shape)
+    kc_activation = (np.dot(pn_to_kc_weights, noisy_pn) - 
+        np.dot(inhibition_strength, inhibitory_neurons_activation))
 
-print(kc_activation[0,:])
-print(synonym_kc_activation[0,:])
+    if t == 0:
+        # checking this equals their equivalent form, largely to gaurd against
+        # having made dimension mismatch errors
+        synonym_kc_activation = np.dot(pn_to_kc_weights, (noisy_pn -
+            np.dot(np.dot(odor_averaged_pn_responses.T, noisy_pn).T,
+            odor_averaged_pn_responses.T).T))
 
-print(kc_activation[-1,:])
-print(synonym_kc_activation[-1,:])
-# TODO recheck above math. identify errors.
-#assert np.allclose(kc_activation, synonym_kc_activation)
+        print('kc_activation.shape:', kc_activation.shape)
+        '''
+        print(synonym_kc_activation.shape)
 
-# my original attempt:
-#np.dot(pn_to_kc_weights, (noisy_pn -
-#    np.dot(np.dot(odor_averaged_pn_responses.T, noisy_pn),
-#    odor_averaged_pn_responses)))
+        print(kc_activation[0,:])
+        print(synonym_kc_activation[0,:])
 
-odor_averaged_kc_activation = np.mean(kc_activation, axis=1)
-assert len(odor_averaged_kc_activation.shape) == 1
-assert odor_averaged_kc_activation.shape[0] == n_kcs
-# their assertion (do algebra to get this consequence)
-assert np.allclose(odor_averaged_kc_activation, 0.0)
+        print(kc_activation[-1,:])
+        print(synonym_kc_activation[-1,:])
+        # TODO recheck above math. identify errors.
+        assert np.allclose(kc_activation, synonym_kc_activation)
+        '''
 
-# 3A: response probabilities of model KCs, each receiving input from n PNs and
+        # my original attempt:
+        #np.dot(pn_to_kc_weights, (noisy_pn -
+        #    np.dot(np.dot(odor_averaged_pn_responses.T, noisy_pn),
+        #    odor_averaged_pn_responses)))
+
+        odor_averaged_kc_activation = np.mean(kc_activation, axis=1)
+        assert len(odor_averaged_kc_activation.shape) == 1
+        assert odor_averaged_kc_activation.shape[0] == n_kcs
+        # their assertion (do algebra to get this consequence)
+        assert np.allclose(odor_averaged_kc_activation, 0.0)
+
+    kc_activation_trials.append(kc_activation)
+
+
+# 3A: "response probabilities" of model KCs, each receiving input from n PNs and
 # global inhibition
+# TODO what is this actually a plot of? the bars are too wide to actually fit
+# 2500 cells, unless maybe light colors overwrite neighboring darker colors, and
+# everything is plotted much wider than it should be...
+# like, this figure is just a hair under 40mm and 40mm / 2500 = 0.016mm,
+# yet each light bar is about 0.7mm wide (maybe a little less, >= 0.65mm)
+# which only leaves room for about 67 cells, best case
+# a random sample would make sense... is that what it is?
+kc_activation_trials = np.stack(kc_activation_trials)
+print('kc_activation_trials.shape:', kc_activation_trials.shape)
 
+kc_threshold_percentile = 0.95
+# TODO should threshold only be determined after taking a number of "trials"?
+# TODO so is this threshold used for all further experiments on simulated KCs?
+# TODO and if i'm not going to use a bunch of trials to calculate the threshold
+# should i at least check whether the 0.95/0.05 proportion holds in the
+# population of simulations?
+kc_response_threshold = np.sort(kc_activation.flatten())[
+    int(round(kc_threshold_percentile * kc_activation.size))]
+print('kc_response_threshold:', kc_response_threshold)
 
+assert np.isclose(np.sum(kc_activation < kc_response_threshold) 
+    / kc_activation.size, kc_threshold_percentile)
+assert np.isclose(np.sum(kc_activation >= kc_response_threshold) 
+    / kc_activation.size, 1 - kc_threshold_percentile)
+
+kc_response_probability = np.mean(kc_activation_trials > kc_response_threshold,
+    axis=0)
+plt.close('all')
+plt.matshow(kc_response_probability)
+#apparent_number_kcs_plotted = 70
+apparent_number_kcs_plotted = 110
+kcs_to_plot = np.random.choice(n_kcs, apparent_number_kcs_plotted,
+    replace=False)
+orn_pn_matrix(kc_response_probability[kcs_to_plot, :], 
+    title='KCs over threshold')
+
+plt.show()
 
 # 3B: the number of missed odors as a function of # of PNs each KC receives
 # input from
@@ -663,4 +805,4 @@ responses.
 
 
 
-plt.show()
+#plt.show()
