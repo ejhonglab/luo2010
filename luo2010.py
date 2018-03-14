@@ -237,6 +237,7 @@ def matrix_plot(mat, title='', xlabel='', ylabel='', matrix_aspect='auto',
 # TODO flag for subsequent plots? how many times am i gonna have to do this?
 # wrap a somewhat lower level function?
 def orn_pn_matrix(mat, title='', xlabel='ORN receptor', luo_style=False):
+    # TODO say which way the input dimensions should go / use dataframe
     """
     Args:
         luo_style (defaults to False): If True, uses jet(-like) color map and is
@@ -261,6 +262,8 @@ def orn_pn_matrix(mat, title='', xlabel='ORN receptor', luo_style=False):
         }
 
     else:
+        # TODO TODO TODO how can y-labels both be about odor, if i'm transposing
+        # in one of the cases? error?
         options = {
             'cmap': plt.cm.viridis,
             'ylabel': 'Odor',
@@ -288,35 +291,34 @@ def orn_pn_matrix(mat, title='', xlabel='ORN receptor', luo_style=False):
         ax.set_yticklabels(hc06.index.values[:-1], fontsize=6)
 
 
-def kc_matrix(mat, title='', xlabel='ORN receptor', luo_style=False):
+def kc_matrix(mat, title='', xlabel='Odor presented', ylabel='KC index',
+              luo_style=False, cbar_label='Response probability'):
+    # TODO say which way the input dimensions should go / use dataframe
     """
     Args:
         luo_style (defaults to False): If True, uses jet(-like) color map and is
         displayed with odor varying along the horizontal axis.
 
-        If False, will use a more perceptually flat color map and display
-        transposed, to be able to read the odor names.
-        TODO correct. transposing in other case
+        ...
     """
     if luo_style:
         # TODO does this interfere w/ downstream functions (value passed in)?
         # test.
-        mat = mat.T
         options = {
-            'cmap': plt.cm.jet,
-            'ylabel': 'Odor Index',
-            'matrix_aspect': 'auto',
+            # plt.cm.afmhot may be closer?
+            'cmap': plt.cm.hot,
+            #'matrix_aspect': 'auto',
             'xtickstep': 20,
-            'ytickstep': 2,
-            'cbar_label': 'Firing Rate (Hz)'
+            # set to 500 in the paper, but theres no way they are displaying
+            # the responses of 2500 cells?
+            'ytickstep': 2
         }
 
     else:
+        #mat = mat.T
         options = {
-            'cmap': plt.cm.viridis,
-            'ylabel': 'Odor',
-            'matrix_aspect': 0.3,
-            'cbar_label': 'Spike count change in 500ms(?) presentation'
+            'cmap': plt.cm.viridis
+            #'matrix_aspect': 0.3,
         }
         # TODO should make x-axis font small enough that there is no overlapping
         # text
@@ -329,14 +331,14 @@ def kc_matrix(mat, title='', xlabel='ORN receptor', luo_style=False):
 
     _, ax = matrix_plot(mat, title=title, **options)
 
+    '''
     if not luo_style:
-        # keep all columns, but exclude last odor label
-        # (because it is the spontaneous firing rate)
-        plt.xticks(np.arange(n_pns))
+        # TODO make sure this is correct no matter the possible transposes above
         plt.yticks(np.arange(n_odors))
         # TODO make sure label order is correct / matshow directly for df?
-        ax.set_xticklabels(hc06.columns.values, rotation='horizontal')
         ax.set_yticklabels(hc06.index.values[:-1], fontsize=6)
+    '''
+
 """
 Fig 1a: raw Hallem and Carlson 2006
 """
@@ -609,80 +611,93 @@ LHNs can be constructed.'
 """
 Fig 3: Model KC responses
 """
-# from methods: "we chose the n synaptic connections for the KCs randomly and
-# drew their weights, denoted by the vector w, from a uniform distribution
-# between 0 and 1."
-# TODO maybe make this more accurate, using information from subsequent studies?
-# some stuff that could help exists, right?
-# TODO break into function? maybe just when i copy into drosolf
 n_kcs = 2500
-print('n_pns:', n_pns)
-print(pn.shape)
-n_pns_per_kc = 5
-# TODO w/ replacement or not? need diff function to do w/o replacement?
-nonzero_weights = np.random.randint(n_pns, size=(n_kcs, n_pns_per_kc))
-# w in their equations (transposed?)
-pn_to_kc_weights = np.zeros((n_kcs, n_pns))
-#pn_to_kc_weights[nonzero_weights] = np.random.uniform(
-#    size=nonzero_weights.shape)
 
-# TODO do different trials of theirs only differ with the activity of the PNs,
-# or do they also re-draw the PN inputs to the KCs?
+# think about naming conventions here...
+# TODO rewrite to allow for distribution, rather than integer n_pns_per_kc
+# input, or make two functions
+def pn_to_kc_inputs(n_pns_per_kc=5, n_kcs=n_kcs, verbose=False):
+    """
+    """
+    # from methods: "we chose the n synaptic connections for the KCs randomly
+    # and drew their weights, denoted by the vector w, from a uniform
+    # distribution between 0 and 1."
 
-# Sampling glomeruli WITH REPLACEMENT. Not obvious whether Luo et al. sample
-# with replacement or not.
-counts = dict()
-# TODO how to vectorize this?
-for k in range(n_kcs):
-    distinct_pn_inputs = set()
+    # TODO maybe make this more accurate, using information from subsequent
+    # studies?  some stuff that could help exists, right?
+    # TODO break into function? maybe just when i copy into drosolf
+    n_pns_per_kc = 5
+    # TODO w/ replacement or not? need diff function to do w/o replacement?
+    nonzero_weights = np.random.randint(n_pns, size=(n_kcs, n_pns_per_kc))
+    # w in their equations (transposed?)
+    pn_to_kc_weights = np.zeros((n_kcs, n_pns))
+    #pn_to_kc_weights[nonzero_weights] = np.random.uniform(
+    #    size=nonzero_weights.shape)
+
+    # TODO do different trials of theirs only differ with the activity of the
+    # PNs, or do they also re-draw the PN inputs to the KCs?
+
+    # Sampling glomeruli WITH REPLACEMENT. Not obvious whether Luo et al. sample
+    # with replacement or not.
+    counts = dict()
+    # TODO how to vectorize this?
+    for k in range(n_kcs):
+        distinct_pn_inputs = set()
+        for i in range(n_pns_per_kc):
+            # so that if we same from the same glomerulus twice, we increase the
+            # weight
+            pn_to_kc_weights[k, nonzero_weights[k,i]] += np.random.uniform()
+            distinct_pn_inputs.add(nonzero_weights[k,i])
+
+        if verbose:
+            n_distinct_inputs = len(distinct_pn_inputs)
+            if n_distinct_inputs in counts:
+                counts[n_distinct_inputs] += 1
+            else:
+                counts[n_distinct_inputs] = 1
+
+    if verbose:
+        print('counts:', counts)
+
+    # same?
+    '''
+    pn_to_kc_weights2 = np.zeros((n_kcs, n_pns))
     for i in range(n_pns_per_kc):
-        # so that if we same from the same glomerulus twice, we increase the
-        # weight
-        pn_to_kc_weights[k, nonzero_weights[k,i]] += np.random.uniform()
-        distinct_pn_inputs.add(nonzero_weights[k,i])
+        pn_to_kc_weights2[:, nonzero_weights[:,i]] = 
+    '''
+    return pn_to_kc_weights
 
-    n_distinct_inputs = len(distinct_pn_inputs)
-    if n_distinct_inputs in counts:
-        counts[n_distinct_inputs] += 1
-    else:
-        counts[n_distinct_inputs] = 1
-print('counts:', counts)
 
-# same?
-'''
-pn_to_kc_weights2 = np.zeros((n_kcs, n_pns))
-for i in range(n_pns_per_kc):
-    pn_to_kc_weights2[:, nonzero_weights[:,i]] = 
-'''
+def kc_activations(pns=None, pn_to_kc_weights=None, checks=False):
+    """
+    Args:
+        pns ():
+        pn_to_kc_weights (): 
+        checks (bool): 
+    """
+    #print('pns.shape:', pns.shape)
 
-# from SI: (.T to indicate transpose, * for matrix multiplication)
-# "the total KC input in our model is I=W.T * r_pn - v * r_in, with r_in the
-# firing rate of one or more globally acting interneurons connected to each KC
-# through a synapse of strength v and driven by PNs through synapses W_in.T so
-# that r_in = W_in.T * r_pn. Defining r_hat = <r_pn> / |<r_pn>|, where the
-# brackets denote an average across odors, we set v = W.T * r_hat and W_in =
-# r_hat. Then,
-# I = W.T * r_pn - v * r_in = W.T * (r_pn - (r_hat.T * r_pn) * r_hat),
-# which removes the projection of the PN rates along the direction of their
-# mean. Note that if we average over all odors,
-# <I> = W.T * <r_pn> - v * <r_in> = 0"
-# TODO is that last consequence (just above) sensible?
-# TODO is this really subtracting first PC?
-# TODO is this model totally linear? (i guess this is all before some
-# threshold?)
+    # from SI: (.T to indicate transpose, * for matrix multiplication) "the
+    # total KC input in our model is I=W.T * r_pn - v * r_in, with r_in the
+    # firing rate of one or more globally acting interneurons connected to each
+    # KC through a synapse of strength v and driven by PNs through synapses
+    # W_in.T so that r_in = W_in.T * r_pn. Defining r_hat = <r_pn> / |<r_pn>|,
+    # where the brackets denote an average across odors, we set v = W.T * r_hat
+    # and W_in = r_hat. Then,
+    # I = W.T * r_pn - v * r_in = W.T * (r_pn - (r_hat.T * r_pn) * r_hat),
+    # which removes the projection of the PN rates along the direction of their
+    # mean. Note that if we average over all odors,
+    # <I> = W.T * <r_pn> - v * <r_in> = 0"
+    # TODO is that last consequence (just above) sensible?
+    # TODO is this really subtracting first PC?
+    # TODO is this model totally linear? (i guess this is all before some
+    # threshold?)
 
-# TODO TODO vectorize to include a trials dimension for these calculations, if
-# possible
+    # TODO TODO vectorize to include a trials dimension for these calculations,
+    # if possible
 
-# TODO probably turn this into a function like noisy_pns
-kc_activation_trials = []
-for t in range(simulated_trials):
-    noisy_pn = noisy_pns()
-    #print('noisy_pn.shape:', noisy_pn.shape)
-
-    # r_hat in their equations
     odor_averaged_pn_responses = np.mean(noisy_pn, axis=1)
-    if t == 0:
+    if checks:
         assert len(odor_averaged_pn_responses.shape) == 1
         assert odor_averaged_pn_responses.shape[0] == n_pns
 
@@ -691,6 +706,7 @@ for t in range(simulated_trials):
     #print(odor_averaged_pn_responses)
     #print(odor_averaged_pn_responses.shape)
 
+    # r_hat in their equations
     # TODO is their denominator definitely this norm? probably?
     normalized_pn_responses = (odor_averaged_pn_responses /
         np.linalg.norm(odor_averaged_pn_responses))
@@ -714,7 +730,7 @@ for t in range(simulated_trials):
     kc_activation = (np.dot(pn_to_kc_weights, noisy_pn) - 
         np.dot(inhibition_strength, inhibitory_neurons_activation))
 
-    if t == 0:
+    if checks:
         # checking this equals their equivalent form, largely to gaurd against
         # having made dimension mismatch errors
         synonym_kc_activation = np.dot(pn_to_kc_weights, (noisy_pn -
@@ -745,8 +761,23 @@ for t in range(simulated_trials):
         # their assertion (do algebra to get this consequence)
         assert np.allclose(odor_averaged_kc_activation, 0.0)
 
-    kc_activation_trials.append(kc_activation)
+    return kc_activation
 
+
+# TODO probably turn this into a function like noisy_pns
+pn_to_kc_weights = pn_to_kc_inputs(n_pns_per_kc=5)
+kc_activation_trials = []
+for t in range(simulated_trials):
+    if t == 0:
+        checks = True
+    else:
+        checks = False
+
+    noisy_pn = noisy_pns()
+    kc_activation_trials.append(kc_activations(pns=noisy_pn, 
+        pn_to_kc_weights=pn_to_kc_weights, checks))
+kc_activation_trials = np.stack(kc_activation_trials)
+print('kc_activation_trials.shape:', kc_activation_trials.shape)
 
 # 3A: "response probabilities" of model KCs, each receiving input from n PNs and
 # global inhibition
@@ -757,8 +788,6 @@ for t in range(simulated_trials):
 # yet each light bar is about 0.7mm wide (maybe a little less, >= 0.65mm)
 # which only leaves room for about 67 cells, best case
 # a random sample would make sense... is that what it is?
-kc_activation_trials = np.stack(kc_activation_trials)
-print('kc_activation_trials.shape:', kc_activation_trials.shape)
 
 kc_threshold_percentile = 0.95
 # TODO should threshold only be determined after taking a number of "trials"?
@@ -777,19 +806,37 @@ assert np.isclose(np.sum(kc_activation >= kc_response_threshold)
 
 kc_response_probability = np.mean(kc_activation_trials > kc_response_threshold,
     axis=0)
-plt.close('all')
-plt.matshow(kc_response_probability)
-#apparent_number_kcs_plotted = 70
+
+# i think this is about how many there are
+#apparent_number_kcs_plotted = 80
 apparent_number_kcs_plotted = 110
 kcs_to_plot = np.random.choice(n_kcs, apparent_number_kcs_plotted,
     replace=False)
-orn_pn_matrix(kc_response_probability[kcs_to_plot, :], 
-    title='KCs over threshold')
 
-plt.show()
+# take the random sample within the plotting function?
+kc_matrix(kc_response_probability[kcs_to_plot, :], luo_style=True)
+kc_matrix(kc_response_probability[kcs_to_plot, :])
+
 
 # 3B: the number of missed odors as a function of # of PNs each KC receives
 # input from
+pn_to_kc_connections = np.arange(20) + 1
+
+# delete me
+plt.close('all')
+
+missed_odors = np.arange(20)
+silent_kcs = np.arange(20)
+
+def three_b(xs, ys, ylabel, title=''):
+    _ = plt.figure()
+    plt.plot(xs, ys, 'r.')
+    plt.title(title, fontweight='bold', y=1.01)
+    plt.xlabel('Number of PN to KC connections', x_axes_font)
+    plt.ylabel(ylabel, y_axes_font)
+
+three_b(pn_to_kc_connections, missed_odors, 'Missed Odors')
+three_b(pn_to_kc_connections, silent_kcs, 'Silent KCs')
 
 
 """
@@ -805,4 +852,4 @@ responses.
 
 
 
-#plt.show()
+plt.show()
