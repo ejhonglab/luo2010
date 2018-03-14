@@ -15,9 +15,11 @@ sample_pns_with_replacement = True
 deterministic = False
 # number of trials used to generate "response probability" plots
 # am i misunderstanding?
-simulated_trials = 1000
+simulated_trials = 100
 exclude_pheromone_receptors = False
-
+# TODO maybe default to this? to reduce deviation from mean performance seed /
+# general lack of averaging may cause? experiment / discuss
+regenerate_connectivity_each_trial = False
 
 if (deterministic or not sample_pns_with_replacement or
     exclude_pheromone_receptors):
@@ -622,11 +624,9 @@ def pn_to_kc_inputs(n_pns_per_kc=5, n_kcs=n_kcs, verbose=False):
     # from methods: "we chose the n synaptic connections for the KCs randomly
     # and drew their weights, denoted by the vector w, from a uniform
     # distribution between 0 and 1."
+    # TODO maybe make this connectivity more accurate, using information from
+    # subsequent studies?  some stuff that could help exists, right?
 
-    # TODO maybe make this more accurate, using information from subsequent
-    # studies?  some stuff that could help exists, right?
-    # TODO break into function? maybe just when i copy into drosolf
-    n_pns_per_kc = 5
     # TODO w/ replacement or not? need diff function to do w/o replacement?
     nonzero_weights = np.random.randint(n_pns, size=(n_kcs, n_pns_per_kc))
     # w in their equations (transposed?)
@@ -668,14 +668,25 @@ def pn_to_kc_inputs(n_pns_per_kc=5, n_kcs=n_kcs, verbose=False):
     return pn_to_kc_weights
 
 
-def kc_activations(pns=None, pn_to_kc_weights=None, checks=False):
+def kc_activations(pns=None, n=None, pn_to_kc_weights=None, checks=False):
     """
     Args:
-        pns ():
-        pn_to_kc_weights (): 
+        pns (np.ndarray):
+        n (int): 
+        pn_to_kc_weights (np.ndarray): 
         checks (bool): 
     """
-    #print('pns.shape:', pns.shape)
+    if pns is None:
+        pns = noisy_pns()
+
+    if pn_to_kc_weights is None:
+        if n is None:
+            # the value the paper ultimately settled on for most of the figures
+            n = 5
+        pn_to_kc_weights = pn_to_kc_inputs(n_pns_per_kc=n)
+        
+    elif not (n is None or pn_to_kc_weights is None):
+        raise ValueError('ambiguous. only pass in either n or pn_to_kc_weights')
 
     # from SI: (.T to indicate transpose, * for matrix multiplication) "the
     # total KC input in our model is I=W.T * r_pn - v * r_in, with r_in the
@@ -696,7 +707,7 @@ def kc_activations(pns=None, pn_to_kc_weights=None, checks=False):
     # TODO TODO vectorize to include a trials dimension for these calculations,
     # if possible
 
-    odor_averaged_pn_responses = np.mean(noisy_pn, axis=1)
+    odor_averaged_pn_responses = np.mean(pns, axis=1)
     if checks:
         assert len(odor_averaged_pn_responses.shape) == 1
         assert odor_averaged_pn_responses.shape[0] == n_pns
@@ -717,7 +728,7 @@ def kc_activations(pns=None, pn_to_kc_weights=None, checks=False):
     #print('pn_to_inh_weights.shape:', pn_to_inh_weights.shape)
 
     # r_in in their equations
-    inhibitory_neurons_activation = np.dot(pn_to_inh_weights.T, noisy_pn)
+    inhibitory_neurons_activation = np.dot(pn_to_inh_weights.T, pns)
     #print('inhibitory_neurons_activation.shape:',
     #    inhibitory_neurons_activation.shape)
 
@@ -727,14 +738,14 @@ def kc_activations(pns=None, pn_to_kc_weights=None, checks=False):
     inhibition_strength = np.dot(pn_to_kc_weights, normalized_pn_responses)
     #print('inhibition_strength.shape:', inhibition_strength.shape)
 
-    kc_activation = (np.dot(pn_to_kc_weights, noisy_pn) - 
+    kc_activation = (np.dot(pn_to_kc_weights, pns) - 
         np.dot(inhibition_strength, inhibitory_neurons_activation))
 
     if checks:
         # checking this equals their equivalent form, largely to gaurd against
         # having made dimension mismatch errors
-        synonym_kc_activation = np.dot(pn_to_kc_weights, (noisy_pn -
-            np.dot(np.dot(odor_averaged_pn_responses.T, noisy_pn).T,
+        synonym_kc_activation = np.dot(pn_to_kc_weights, (pns -
+            np.dot(np.dot(odor_averaged_pn_responses.T, pns).T,
             odor_averaged_pn_responses.T).T))
 
         print('kc_activation.shape:', kc_activation.shape)
@@ -749,10 +760,12 @@ def kc_activations(pns=None, pn_to_kc_weights=None, checks=False):
         # TODO recheck above math. identify errors.
         assert np.allclose(kc_activation, synonym_kc_activation)
         '''
+        # TODO if this inhibition is not equivalent to "subtracting first PC"
+        # then prove it. compute PCs, calculate with that, show different.
 
         # my original attempt:
-        #np.dot(pn_to_kc_weights, (noisy_pn -
-        #    np.dot(np.dot(odor_averaged_pn_responses.T, noisy_pn),
+        #np.dot(pn_to_kc_weights, (pns -
+        #    np.dot(np.dot(odor_averaged_pn_responses.T, pns),
         #    odor_averaged_pn_responses)))
 
         odor_averaged_kc_activation = np.mean(kc_activation, axis=1)
@@ -763,49 +776,115 @@ def kc_activations(pns=None, pn_to_kc_weights=None, checks=False):
 
     return kc_activation
 
+# TODO make another fn called kc_responses that chains the above with this?
+def calc_response_prob(trial_fn=lambda: kc_activations(),
+                       simulated_trials=simulated_trials):
+    """
+    Args:
+        trial_fn (callable): Each call should return an independent simulated
+                             trial. If trial_fn_parameter is None
+        simulated_trials (int): number of trials to generate
+                                -maybe rename?
+    """
+    # was it reasonable to not generate the pn_to_kc_weights here?
+    # seems to go hand-in-hand with not being able to control the checks arg
+    # here...
+    trials = []
+    for t in range(simulated_trials):
+        if t == 0:
+            checks = True
+        else:
+            checks = False
+        trials.append(trial_fn())
+    trials = np.stack(trials)
 
-# TODO probably turn this into a function like noisy_pns
-pn_to_kc_weights = pn_to_kc_inputs(n_pns_per_kc=5)
-kc_activation_trials = []
-for t in range(simulated_trials):
-    if t == 0:
-        checks = True
+    threshold_percentile = 0.95
+    # TODO allow suppression
+    print('determining inverse-CDF of {} for response threshold...'.format(
+        threshold_percentile))
+    response_threshold = np.sort(trials.flatten())[
+        int(round(threshold_percentile * trials.size))]
+
+    assert np.isclose(np.sum(trials < response_threshold) 
+        / trials.size, threshold_percentile)
+    assert np.isclose(np.sum(trials >= response_threshold) 
+        / trials.size, 1 - threshold_percentile)
+
+    response_probability = np.mean(trials > response_threshold, axis=0)
+    return response_probability
+
+def responders(response_probability):
+    """
+    """
+    # not measuring the same thing as kc_response_threshold above
+    response_criteria = 0.50
+    # "we define a neuron as responding if it receives an above-threshold input
+    # in at least 50% of trials." "fairly stringent"
+    responses_above_criteria = kc_response_probability >= response_criteria
+    return responses_above_criteria
+
+def missed_odors(responses):
+    """
+    """
+    missed_odors = np.sum(responses, axis=0) == 0
+    assert missed_odors.size == n_odors
+    return np.sum(missed_odors)
+
+def silent_kcs(responses):
+    """
+    """
+    silent_kcs = np.sum(responses, axis=1) == 0
+    assert silent_kcs.size == n_kcs
+    return np.sum(silent_kcs)
+
+
+# Seeing how "quality" of sparse representation varies as the number of PN
+# inputs to the KCs, with quality achieved by minimizing both missed odors and
+# silent KCs, as defined above.
+pn_to_kc_connections = np.arange(20) + 1
+n_missed_odors = []
+n_silent_kcs = []
+
+for n in pn_to_kc_connections:
+    if regenerate_connectivity_each_trial:
+        # kc_activations will generate the weights when pn_to_kc_weights is
+        # None (the default)
+        pn_kc_weights = None
     else:
-        checks = False
+        pn_kc_weights = pn_to_kc_inputs(n_pns_per_kc=n)
 
-    noisy_pn = noisy_pns()
-    kc_activation_trials.append(kc_activations(pns=noisy_pn, 
-        pn_to_kc_weights=pn_to_kc_weights, checks))
-kc_activation_trials = np.stack(kc_activation_trials)
-print('kc_activation_trials.shape:', kc_activation_trials.shape)
+    print('simulating {} trials of KC activation '.format(simulated_trials) + 
+        'to Hallem odors, each KC receiving {} input(s).'.format(n))
 
-# 3A: "response probabilities" of model KCs, each receiving input from n PNs and
-# global inhibition
-# TODO what is this actually a plot of? the bars are too wide to actually fit
-# 2500 cells, unless maybe light colors overwrite neighboring darker colors, and
-# everything is plotted much wider than it should be...
+    # TODO maybe refactor again? i feel like i've make my control over when to
+    # check kind of cumbersome. maybe likewise for the weights, but i do like
+    # having default for everything, so that each function can pretty much just
+    # be called on it's own, to make it easier for someone to play around with
+    # the functions...
+    kc_response_probability = calc_response_prob(
+        trial_fn=lambda: kc_activations(pn_to_kc_weights=pn_kc_weights,
+                                        checks=True if n == 0 else False))
+
+    # because this is used for most of the plots
+    if n == 5:
+        five_inputs_kc_p_response = kc_response_probability
+
+    responses = responders(kc_response_probability)
+    n_missed_odors.append(missed_odors(responses))
+    n_silent_kcs.append(silent_kcs(responses))
+
+del kc_response_probability
+
+
+# 3A: "response probabilities" of model KCs, each receiving input from n PNs
+# and global inhibition
+# TODO what is this actually a plot of? the bars are too wide to actually
+# fit 2500 cells, unless maybe light colors overwrite neighboring darker
+# colors, and everything is plotted much wider than it should be...
 # like, this figure is just a hair under 40mm and 40mm / 2500 = 0.016mm,
 # yet each light bar is about 0.7mm wide (maybe a little less, >= 0.65mm)
 # which only leaves room for about 67 cells, best case
 # a random sample would make sense... is that what it is?
-
-kc_threshold_percentile = 0.95
-# TODO should threshold only be determined after taking a number of "trials"?
-# TODO so is this threshold used for all further experiments on simulated KCs?
-# TODO and if i'm not going to use a bunch of trials to calculate the threshold
-# should i at least check whether the 0.95/0.05 proportion holds in the
-# population of simulations?
-kc_response_threshold = np.sort(kc_activation.flatten())[
-    int(round(kc_threshold_percentile * kc_activation.size))]
-print('kc_response_threshold:', kc_response_threshold)
-
-assert np.isclose(np.sum(kc_activation < kc_response_threshold) 
-    / kc_activation.size, kc_threshold_percentile)
-assert np.isclose(np.sum(kc_activation >= kc_response_threshold) 
-    / kc_activation.size, 1 - kc_threshold_percentile)
-
-kc_response_probability = np.mean(kc_activation_trials > kc_response_threshold,
-    axis=0)
 
 # i think this is about how many there are
 #apparent_number_kcs_plotted = 80
@@ -814,19 +893,21 @@ kcs_to_plot = np.random.choice(n_kcs, apparent_number_kcs_plotted,
     replace=False)
 
 # take the random sample within the plotting function?
-kc_matrix(kc_response_probability[kcs_to_plot, :], luo_style=True)
-kc_matrix(kc_response_probability[kcs_to_plot, :])
-
+kc_matrix(five_inputs_kc_p_response[kcs_to_plot, :], luo_style=True)
+kc_matrix(five_inputs_kc_p_response[kcs_to_plot, :])
 
 # 3B: the number of missed odors as a function of # of PNs each KC receives
 # input from
-pn_to_kc_connections = np.arange(20) + 1
-
-# delete me
+# TODO delete me
 plt.close('all')
 
-missed_odors = np.arange(20)
-silent_kcs = np.arange(20)
+
+# TODO TODO TODO i was able to roughly match the silent KC graph, but the missed
+# odors is all flat at zero, with 1 missed odor at 1 input per KC. why is that?
+# do i need to use the same threshold (determined at n=5) for everything, or
+# something?
+print('n_missed_odors:', n_missed_odors)
+print('n_silent_kcs:', n_silent_kcs)
 
 def three_b(xs, ys, ylabel, title=''):
     _ = plt.figure()
@@ -834,9 +915,10 @@ def three_b(xs, ys, ylabel, title=''):
     plt.title(title, fontweight='bold', y=1.01)
     plt.xlabel('Number of PN to KC connections', x_axes_font)
     plt.ylabel(ylabel, y_axes_font)
+    # TODO fix x tick marks to only display integers
 
-three_b(pn_to_kc_connections, missed_odors, 'Missed Odors')
-three_b(pn_to_kc_connections, silent_kcs, 'Silent KCs')
+three_b(pn_to_kc_connections, n_missed_odors, 'Missed Odors')
+three_b(pn_to_kc_connections, n_silent_kcs, 'Silent KCs')
 
 
 """
