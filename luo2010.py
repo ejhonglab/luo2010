@@ -10,6 +10,7 @@ import seaborn as sns
 import ipdb
 
 
+n_kcs = 2500
 sample_pns_with_replacement = True
 
 # If True, does not add the noise they added in the paper.
@@ -30,10 +31,13 @@ regenerate_connectivity_each_trial = False
 # trials? I would hope it's the former? Thought this is one possible difference.
 all_use_five_input_threshold = True
 
+
 if (deterministic or not sample_pns_with_replacement or
     exclude_pheromone_receptors):
     raise NotImplementedError
 
+# prevents white lines from being overlayed over data
+sns.set_style('dark')
 np.random.seed(1118)
 
 # adapted from a StackOverflow answer by 'doug'
@@ -149,9 +153,6 @@ def test_pca(data):
     print(sk_data - projected)
     #assert np.allclose(sk_sorn, projected)
 
-
-# prevents white lines from being overlayed over data
-sns.set_style('dark')
 
 """
 A little bit about the Hallem and Carlson 2006 dataset:
@@ -627,7 +628,6 @@ LHNs can be constructed.'
 """
 Fig 3: Model KC responses
 """
-n_kcs = 2500
 
 # think about naming conventions here...
 # TODO rewrite to allow for distribution, rather than integer n_pns_per_kc
@@ -682,13 +682,31 @@ def pn_to_kc_inputs(n_pns_per_kc=5, n_kcs=n_kcs, verbose=False):
     return pn_to_kc_weights
 
 
-def kc_activations(pns=None, n=None, pn_to_kc_weights=None, checks=False):
+def kc_activations(pns=None, n=None, pn_to_kc_weights=None, inhibition=True, 
+                   checks=False):
     """
     Args:
-        pns (np.ndarray):
-        n (int): 
-        pn_to_kc_weights (np.ndarray): 
-        checks (bool): 
+        pns (np.ndarray): (optional) If passed, model KC responses are computed
+            with these PN responses. By default, model PNs responses are
+            generated with the function noisy_pns().
+
+            TODO say which dimensions / labels are expected
+
+        n (int): The number of PNs each KC will receive input from, each weight
+            drawn from the uniform distribution on [0,1). Only pass either this
+            or pn_to_kc_weights. If neither is passed, the function behaves as
+            if it had n set to 5, as the parameterization used for most of the
+            paper.
+
+        pn_to_kc_weights (np.ndarray): The PN to KC weights to use, if
+            predefined. Only pass either this or n.
+
+        inhibition (bool): Whether to include their "global" inhibition term
+            False should be able to recapitulate S2, when fed through the rest
+            of the analysis.
+
+        checks (bool): Whether to check dimensions and some of the identities in
+            the supplement.
     """
     if pns is None:
         pns = noisy_pns()
