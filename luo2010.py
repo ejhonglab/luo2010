@@ -212,7 +212,6 @@ def matrix_plot(mat, title='', xlabel='', ylabel='', matrix_aspect='auto',
         xtickstep (int):
         ytickstep (int): 
     """
-
     fig = plt.figure()
     # the 111 means "1x1 grid, first subplot"
     # TODO still necessary?
@@ -430,6 +429,12 @@ def pn_responses_and_plots(lateral_inhibition=True):
 
 pn_no_inh = pn_responses_and_plots(lateral_inhibition=False)
 pn = pn_responses_and_plots()
+# TODO TODO are PN responses actually more decorrelated than the ORNs in this
+# model? or is it only subtracting the PN mean at the level of the KC input that
+# does any decorrelation? where does the decorrelation come from? and which
+# papers support this again?
+# (they claim it in the last paragraph before the "Concentration dependence"
+# section)
 
 
 """
@@ -820,12 +825,18 @@ def responders(response_probability):
     response_criteria = 0.50
     # "we define a neuron as responding if it receives an above-threshold input
     # in at least 50% of trials." "fairly stringent"
-    responses_above_criteria = kc_response_probability >= response_criteria
+
+    # TODO why was this working with kc_response_probability (a typo), when that
+    # variable is not defined until below? true, that variable should exist by
+    # the time this function is called... so i guess i misunderstood how
+    # Python's scoping works?
+    responses_above_criteria = response_probability >= response_criteria
     return responses_above_criteria
 
 def missed_odors(responses):
     """
     """
+    # TODO maybe use logical not + or or something instead
     missed_odors = np.sum(responses, axis=0) == 0
     assert missed_odors.size == n_odors
     return np.sum(missed_odors)
@@ -837,6 +848,9 @@ def silent_kcs(responses):
     assert silent_kcs.size == n_kcs
     return np.sum(silent_kcs)
 
+def kc_response_summary(responses, weights=None):
+    """
+    """
 
 # Seeing how "quality" of sparse representation varies as the number of PN
 # inputs to the KCs, with quality achieved by minimizing both missed odors and
@@ -845,6 +859,9 @@ pn_to_kc_connections = np.arange(20) + 1
 n_missed_odors = []
 n_silent_kcs = []
 
+# TODO TODO maybe plot weight matrices as a crude debugging step? + activations
+# + distributions of # responders to each odor + # odors evoking a response
+# across cells? + print different thresholds (+ distribution of activations?)
 for n in pn_to_kc_connections:
     if regenerate_connectivity_each_trial:
         # kc_activations will generate the weights when pn_to_kc_weights is
@@ -908,6 +925,13 @@ plt.close('all')
 # something?
 print('n_missed_odors:', n_missed_odors)
 print('n_silent_kcs:', n_silent_kcs)
+
+# TODO TODO look at distribution of number of inputs required for the threshold
+# response (possible?)? and distribution not leading to a response? (maybe the
+# uniform distribution has some weird consequences?)
+
+# TODO do i also get an average of ~125 cells responding per odor ("and min of 2
+# cells", over all 110 odors) (this is all for the 5 input case)
 
 def three_b(xs, ys, ylabel, title=''):
     _ = plt.figure()

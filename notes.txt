@@ -1,2 +1,9 @@
 -didn't i have plot settings to replicate the look of figure 1 C-H?
  uncommitted on my desktop or something? with other stuff?
+
+-ways i could compare 1st PC to mean (to evaluate Ann's claim):
+  -calculate angle between them / corr / dist
+  -overlay in t-SNE / other 2 dimensional representation of the data
+
+however, not sure any of those would really affect her argument. also, how
+similar is this inhibition to what hers ultimately ends up being?
