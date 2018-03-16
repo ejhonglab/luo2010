@@ -31,13 +31,57 @@ regenerate_connectivity_each_trial = False
 # trials? I would hope it's the former? Thought this is one possible difference.
 all_use_five_input_threshold = True
 
+###############################################################################
+# PN properties
+###############################################################################
+# units of Hz in the paper
+# TODO is that correct here? (seems so)
+
+# the maximum firing rate for PNs (assumed equal for all)
+rmax = 165
+# in the language of the Hill equation, w/o exponent it is as a Kd dissociation
+# constant, and if it had an exponent, it would be like Ka, (Ka)^n = Kd = kd/ka
+# Ka = ligand concentration producing half occupation of binding sites
+# n > 1 ~= cooperative binding, but i guess here, it just recapitulates
+# inflection of ORN -> PN function
+sigma = 12
+m = 0.05
+
+# TODO should i use the noisy PN responses for PN response plot too? seed?
+# for all subsequent transformations?
+# described in Methods section of main text
+# see: Sensory processing in the Drosophila antennal lobe increases the
+# reliability and separability of ensemble odor representations (Bhandawhat
+# et al., 2007) for possible justification
+sigma_pn_noise_hz = 10
+alpha_pn_noise_hz = 0.025
+###############################################################################
+
 
 if (deterministic or not sample_pns_with_replacement or
     exclude_pheromone_receptors):
     raise NotImplementedError
 
+axes_font_size = 10
+axes_font_weight = 'demi'
+x_axes_font = {'fontsize': axes_font_size ,
+               'fontweight': axes_font_weight,
+               'verticalalignment': 'top',
+               'horizontalalignment': 'center'}
+
+y_axes_font = {'fontsize': axes_font_size ,
+               'fontweight': axes_font_weight,
+               'verticalalignment': 'bottom',
+               'horizontalalignment': 'center'}
+
+cbar_font = {'fontsize': axes_font_size ,
+             'fontweight': axes_font_weight,
+             'verticalalignment': 'top',
+             'horizontalalignment': 'center'}
+
 # prevents white lines from being overlayed over data
 sns.set_style('dark')
+
 np.random.seed(1118)
 
 # adapted from a StackOverflow answer by 'doug'
@@ -196,23 +240,6 @@ hc06.columns.name = 'receptor'
 # in paper
 n_pns = len(hc06.columns)
 n_odors = len(hc06.index) - 1
-
-axes_font_size = 10
-axes_font_weight = 'demi'
-x_axes_font = {'fontsize': axes_font_size ,
-               'fontweight': axes_font_weight,
-               'verticalalignment': 'top',
-               'horizontalalignment': 'center'}
-
-y_axes_font = {'fontsize': axes_font_size ,
-               'fontweight': axes_font_weight,
-               'verticalalignment': 'bottom',
-               'horizontalalignment': 'center'}
-
-cbar_font = {'fontsize': axes_font_size ,
-             'fontweight': axes_font_weight,
-             'verticalalignment': 'top',
-             'horizontalalignment': 'center'}
 
 
 def matrix_plot(mat, title='', xlabel='', ylabel='', matrix_aspect='auto',
@@ -387,20 +414,6 @@ Fig 1b: simple model PN responses
 (assuming now 1 receptor -> 1 PN (class). see note above)
 """
 
-pn_xlabel = 'Cognate ORN receptor'
-# units of Hz in the paper
-# TODO is that correct here? (seems so)
-
-# the maximum firing rate for PNs (assumed equal for all)
-rmax = 165
-# in the language of the Hill equation, w/o exponent it is as a Kd dissociation
-# constant, and if it had an exponent, it would be like Ka, (Ka)^n = Kd = kd/ka
-# Ka = ligand concentration producing half occupation of binding sites
-# n > 1 ~= cooperative binding, but i guess here, it just recapitulates
-# inflection of ORN -> PN function
-sigma = 12
-m = 0.05
-
 def pn_responses_and_plots(lateral_inhibition=True):
     """
     """
@@ -431,6 +444,7 @@ def pn_responses_and_plots(lateral_inhibition=True):
 
     # the authors used "PN index", but I like this better
     # TODO maybe alter this function to return subplots (within style)?
+    pn_xlabel = 'Cognate ORN receptor'
     orn_pn_matrix(pn_responses, title=pn_matrix_title, xlabel=pn_xlabel,
         luo_style=True)
     orn_pn_matrix(pn_responses, title=pn_matrix_title, xlabel=pn_xlabel)
@@ -587,7 +601,9 @@ plt.plot(pn_eval / pn_eval.sum(), '.')
 
 
 # TODO move down?
-def noisy_pns(trials=1):
+def noisy_pns(alpha=alpha_pn_noise_hz, sigma=sigma_pn_noise_hz, trials=1):
+    # TODO follow consistent pattern to other functions, re: taking pn response
+    # argument, but otherwise generating it? way to have less boilerplate?
     """
     """
     # TODO use trials to return tensor of activations, for vectorizing whole
@@ -595,22 +611,15 @@ def noisy_pns(trials=1):
     if trials != 1:
         raise NotImplementedError
 
-    # TODO should i use the noisy PN responses for PN response plot too? seed?
-    # for all subsequent transformations?
-    # described in Methods section of main text
-    # see: Sensory processing in the Drosophila antennal lobe increases the
-    # reliability and separability of ensemble odor representations (Bhandawhat
-    # et al., 2007) for possible justification
-    sigma_pn_noise_hz = 10
-    alpha_pn_noise_hz = 0.025
-
     # TODO why this function? what the deterministic part of tanh term look
     # like?
     # they didn't say the noise was normal, they just said zero mean and unit
     # variance, but i assumed
     # r_pn in their equations (after transformation to add noise)
     # some experimental justification for this noise distribution?
-    return (pn + (sigma_pn_noise_hz * np.tanh(alpha_pn_noise_hz * pn) *
+
+    # TODO plot version of resonses w/ noise added for sanity checking?
+    return (pn + (sigma * np.tanh(alpha * pn) *
         np.random.normal(loc=0.0, scale=1.0, size=pn.shape))).T
 
 """
