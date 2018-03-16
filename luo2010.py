@@ -11,15 +11,24 @@ import ipdb
 
 
 sample_pns_with_replacement = True
-# if True, does not add the noise they added in the paper
+
+# If True, does not add the noise they added in the paper.
 deterministic = False
+
 # number of trials used to generate "response probability" plots
 # am i misunderstanding?
 simulated_trials = 100
+
 exclude_pheromone_receptors = False
 # TODO maybe default to this? to reduce deviation from mean performance seed /
 # general lack of averaging may cause? experiment / discuss
 regenerate_connectivity_each_trial = False
+
+# How literally should I take "even though we used the same threshold for *all*
+# KCs"? a threshold defined as the 95th percentile of the responses, after
+# building the PN->KC weights and generating activations for however many
+# trials? I would hope it's the former? Thought this is one possible difference.
+all_use_five_input_threshold = True
 
 if (deterministic or not sample_pns_with_replacement or
     exclude_pheromone_receptors):
@@ -783,13 +792,18 @@ def kc_activations(pns=None, n=None, pn_to_kc_weights=None, checks=False):
 
 # TODO make another fn called kc_responses that chains the above with this?
 def calc_response_prob(trial_fn=lambda: kc_activations(),
-                       simulated_trials=simulated_trials):
+                       simulated_trials=simulated_trials,
+                       response_threshold=None):
     """
     Args:
         trial_fn (callable): Each call should return an independent simulated
                              trial. If trial_fn_parameter is None
         simulated_trials (int): number of trials to generate
                                 -maybe rename?
+        response_threshold (number): 
+
+    Returns:
+        
     """
     # was it reasonable to not generate the pn_to_kc_weights here?
     # seems to go hand-in-hand with not being able to control the checks arg
@@ -803,20 +817,27 @@ def calc_response_prob(trial_fn=lambda: kc_activations(),
         trials.append(trial_fn())
     trials = np.stack(trials)
 
-    threshold_percentile = 0.95
-    # TODO allow suppression
-    print('determining inverse-CDF of {} for response threshold...'.format(
-        threshold_percentile))
-    response_threshold = np.sort(trials.flatten())[
-        int(round(threshold_percentile * trials.size))]
+    if response_threshold is None:
+        threshold_percentile = 0.95
+        # TODO allow suppression
+        print('determining inverse-CDF of {} for response threshold...'.format(
+            threshold_percentile))
+        response_threshold = np.sort(trials.flatten())[
+            int(round(threshold_percentile * trials.size))]
 
-    assert np.isclose(np.sum(trials < response_threshold) 
-        / trials.size, threshold_percentile)
-    assert np.isclose(np.sum(trials >= response_threshold) 
-        / trials.size, 1 - threshold_percentile)
+        assert np.isclose(np.sum(trials < response_threshold) 
+            / trials.size, threshold_percentile)
+        assert np.isclose(np.sum(trials >= response_threshold) 
+            / trials.size, 1 - threshold_percentile)
+        return_none = False
+
+    else:
+        # Want to return None for response threshold in this case, to not give
+        # the false impression it was calculated in here.
+        return_none = True
 
     response_probability = np.mean(trials > response_threshold, axis=0)
-    return response_probability
+    return response_probability, None if return_none else response_threshold
 
 def responders(response_probability):
     """
@@ -833,32 +854,56 @@ def responders(response_probability):
     responses_above_criteria = response_probability >= response_criteria
     return responses_above_criteria
 
+def responses_along_axis(responses, axis, expected_size):
+    """
+    Args:
+        responses (array-like): a boolean type array to be checked
+
+        axis (int): axis along which to check for a complete lack of responses
+
+        expected_size (int): for checking result it expected size. somewhat
+        tautological / equivalent to checking dimensions of responses.
+    """
+    assert responses.dtype == np.dtype('bool')
+    no_responses = np.logical_not(np.any(responses, axis=axis))
+    assert no_responses.size == expected_size
+    return np.sum(no_responses)
+
 def missed_odors(responses):
     """
     """
-    # TODO maybe use logical not + or or something instead
-    missed_odors = np.sum(responses, axis=0) == 0
-    assert missed_odors.size == n_odors
-    return np.sum(missed_odors)
+    # TODO use variable for the odor / kc axis?
+    return responses_along_axis(responses, 0, n_odors)
 
 def silent_kcs(responses):
     """
+    Args:
+        responses 
     """
-    silent_kcs = np.sum(responses, axis=1) == 0
-    assert silent_kcs.size == n_kcs
-    return np.sum(silent_kcs)
+    return responses_along_axis(responses, 1, n_kcs)
 
 def kc_response_summary(responses, weights=None):
     """
     """
+    pass
+
 
 # Seeing how "quality" of sparse representation varies as the number of PN
 # inputs to the KCs, with quality achieved by minimizing both missed odors and
 # silent KCs, as defined above.
-pn_to_kc_connections = np.arange(20) + 1
+pn_to_kc_connections = [n + 1 for n in range(20)]
 n_missed_odors = []
 n_silent_kcs = []
 
+if all_use_five_input_threshold:
+    ok_input_number = 5
+    # move 5 to the front of the list, so we can calculate its threshold and
+    # save it for models using a different number of PN inputs to each KC
+    assert ok_input_number in pn_to_kc_connections
+    pn_to_kc_connections.remove(ok_input_number)
+    pn_to_kc_connections.insert(0, ok_input_number)
+
+response_threshold = None
 # TODO TODO maybe plot weight matrices as a crude debugging step? + activations
 # + distributions of # responders to each odor + # odors evoking a response
 # across cells? + print different thresholds (+ distribution of activations?)
@@ -878,13 +923,20 @@ for n in pn_to_kc_connections:
     # having default for everything, so that each function can pretty much just
     # be called on it's own, to make it easier for someone to play around with
     # the functions...
-    kc_response_probability = calc_response_prob(
+    kc_response_probability, calculated_response_threshold = calc_response_prob(
         trial_fn=lambda: kc_activations(pn_to_kc_weights=pn_kc_weights,
-                                        checks=True if n == 0 else False))
+                                        checks=True if n == 0 else False),
+        response_threshold=response_threshold)
+
 
     # because this is used for most of the plots
     if n == 5:
         five_inputs_kc_p_response = kc_response_probability
+
+        if all_use_five_input_threshold:
+            print('using response threshold determined with 5 input model ' +
+                  'for all other models!')
+            response_threshold = calculated_response_threshold
 
     responses = responders(kc_response_probability)
     n_missed_odors.append(missed_odors(responses))
@@ -926,9 +978,9 @@ plt.close('all')
 print('n_missed_odors:', n_missed_odors)
 print('n_silent_kcs:', n_silent_kcs)
 
-# TODO TODO look at distribution of number of inputs required for the threshold
-# response (possible?)? and distribution not leading to a response? (maybe the
-# uniform distribution has some weird consequences?)
+# TODO TODO TODO look at distribution of number of inputs required for the
+# threshold response (possible?)? and distribution not leading to a response?
+# (maybe the uniform distribution has some subtle consequences?)
 
 # TODO do i also get an average of ~125 cells responding per odor ("and min of 2
 # cells", over all 110 odors) (this is all for the 5 input case)
