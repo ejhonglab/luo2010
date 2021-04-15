@@ -7,9 +7,13 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-import ipdb
+import drosolf.orns
 
 
+# TODO argument for keeping configuration up top, is that they don't need to be
+# passed to each function, and any new function here can have access to them by
+# default? downsides besides style? alternatives? just suck it up and pass a
+# configuration dict to each function?
 n_kcs = 2500
 sample_pns_with_replacement = True
 
@@ -19,8 +23,8 @@ deterministic = False
 # number of trials used to generate "response probability" plots
 # am i misunderstanding?
 simulated_trials = 100
-
 exclude_pheromone_receptors = False
+
 # TODO maybe default to this? to reduce deviation from mean performance seed /
 # general lack of averaging may cause? experiment / discuss
 regenerate_connectivity_each_trial = False
@@ -29,14 +33,11 @@ regenerate_connectivity_each_trial = False
 # KCs"? a threshold defined as the 95th percentile of the responses, after
 # building the PN->KC weights and generating activations for however many
 # trials? I would hope it's the former? Thought this is one possible difference.
-all_use_five_input_threshold = True
+all_use_five_input_threshold = False
 
 ###############################################################################
 # PN properties
 ###############################################################################
-# units of Hz in the paper
-# TODO is that correct here? (seems so)
-
 # the maximum firing rate for PNs (assumed equal for all)
 rmax = 165
 # in the language of the Hill equation, w/o exponent it is as a Kd dissociation
@@ -47,8 +48,6 @@ rmax = 165
 sigma = 12
 m = 0.05
 
-# TODO should i use the noisy PN responses for PN response plot too? seed?
-# for all subsequent transformations?
 # described in Methods section of main text
 # see: Sensory processing in the Drosophila antennal lobe increases the
 # reliability and separability of ensemble odor representations (Bhandawhat
@@ -56,7 +55,6 @@ m = 0.05
 sigma_pn_noise_hz = 10
 alpha_pn_noise_hz = 0.025
 ###############################################################################
-
 
 if (deterministic or not sample_pns_with_replacement or
     exclude_pheromone_receptors):
@@ -79,10 +77,59 @@ cbar_font = {'fontsize': axes_font_size ,
              'verticalalignment': 'top',
              'horizontalalignment': 'center'}
 
-# prevents white lines from being overlayed over data
-sns.set_style('dark')
+# TODO TODO refactor this stuff out. use drosolf
+"""
+A little bit about the Hallem and Carlson 2006 dataset:
+    -each odor pulse is 500ms long (exceptions?)
+    -responses (other than spontaneous) are # of spikes in those 500ms -
+     spontaneous
+    -where spontaneous is just count in 500ms without stimulation
+    -flies are <4 weeks old (but how young on average?)
+    -24 ml/s carrier with 5.9 ml/s odor stream
+    -female flies (??)
+"""
+# skip glomerulus labels, which are not assigned to each response
+# keep the receptor labels, which are assigned to each response
+# TODO just use drosolf?
+# TODO possible to make matrix plotting function not depend on this? maybe use
+# df? (so this could either be taken from drosolf or otherwise moved below,
+# with rest of numerical code, away from mess of plotting code)
+hc06 = pd.read_csv('./Hallem_Carlson_2006.csv', skiprows=1)
 
-np.random.seed(1118)
+# first column of first row manually set to this in the CSV data file
+# might want to use more pandonic way of doing this
+hc06 = hc06.set_index(['odor'])
+hc06.columns.name = 'receptor'
+# TODO remove receptors Or33b, Or47b, Or65a, and Or88a (pheromone receptors) as
+# in paper
+# TODO TODO refactor configuration. dict?
+n_pns = len(hc06.columns)
+n_odors = len(hc06.index) - 1
+
+# exclude the last row, because those are spontaneous firing rates
+delta_orn = hc06.as_matrix()[:-1,:]
+
+# get the spontaneous rates so we can add them back
+spont_orn = hc06.loc[hc06.index == 'spontaneous firing rate'
+        ].as_matrix().flatten()
+
+# recover actual firing rates (in the 500ms binning windows)
+# TODO maybe keep it as a df?
+orn = np.empty_like(delta_orn) * np.nan
+
+# TODO numpy way to do this broadcasting?
+
+# for each odor add the spontaneous rates to the difference observed for that
+# odor adds the vector of spontaneous rates across all receptors to the odor
+# specific
+# vector of reponses across receptors
+for i in range(delta_orn.shape[0]):
+    orn[i,:] = delta_orn[i,:] + spont_orn
+
+# It seems that what Luo et al do is set anything here that would go below zero
+# to zero, but that might be wrong. Read more carefully, but they might not say.
+orn[orn < 0] = 0
+
 
 # adapted from a StackOverflow answer by 'doug'
 def pca(data, components=None):
@@ -162,6 +209,7 @@ def pca(data, components=None):
     return np.dot(data, evecs), evals, evecs
 
 
+# TODO move to a test directory?
 def test_pca(data):
     '''
     test by attempting to recover original data array from
@@ -196,50 +244,6 @@ def test_pca(data):
         - data)))
     print(sk_data - projected)
     #assert np.allclose(sk_sorn, projected)
-
-
-"""
-A little bit about the Hallem and Carlson 2006 dataset:
-    -each odor pulse is 500ms long (exceptions?)
-    -responses (other than spontaneous) are # of spikes in those 500ms -
-     spontaneous
-    -where spontaneous is just count in 500ms without stimulation
-    -flies are <4 weeks old (but how young on average?)
-    -24 ml/s carrier with 5.9 ml/s odor stream
-    -female flies (??)
-
-    TODO: my interpretation of why spontaneous - diff is sometimes negative is
-    that the diff is calculated using (in at least the 2004 paper, was unclear
-    in 2006) the second (maybe 0.5 sec here) before and the second after (with
-    500 ms pulse in their 2004 paper)
-    -if this is the case, there could just be an unusually busy period preceding
-     the stimulus, exagerating the inhibition
-"""
-
-# TODO exclude pheromone (and other selective) receptors, to compare to what Luo
-# et al actually did
-
-# TODO using receptor data now. mostly the same as using glomeruli data, but
-# should perhaps be using glomeruli data instead if there is overlapping
-# expression of any of the receptors in their dataset, or if any two provide
-# input to a common set of PNs
-
-# skip glomerulus labels, which are not assigned to each response
-# keep the receptor labels, which are assigned to each response
-# TODO just use drosolf?
-# TODO possible to make matrix plotting function not depend on this? maybe use
-# df? (so this could either be taken from drosolf or otherwise moved below,
-# with rest of numerical code, away from mess of plotting code)
-hc06 = pd.read_csv('./Hallem_Carlson_2006.csv', skiprows=1)
-
-# first column of first row manually set to this in the CSV data file
-# might want to use more pandonic way of doing this
-hc06 = hc06.set_index(['odor'])
-hc06.columns.name = 'receptor'
-# TODO remove receptors Or33b, Or47b, Or65a, and Or88a (pheromone receptors) as
-# in paper
-n_pns = len(hc06.columns)
-n_odors = len(hc06.index) - 1
 
 
 def matrix_plot(mat, title='', xlabel='', ylabel='', matrix_aspect='auto',
@@ -377,45 +381,15 @@ def kc_matrix(mat, title='', xlabel='Odor presented', ylabel='KC index',
         ax.set_yticklabels(hc06.index.values[:-1], fontsize=6)
     '''
 
-"""
-Fig 1a: raw Hallem and Carlson 2006
-"""
-# exclude the last row, because those are spontaneous firing rates
-delta_orn = hc06.as_matrix()[:-1,:]
-
-# TODO just use drosolf?
-# get the spontaneous rates so we can add them back
-spont_orn = hc06.loc[hc06.index == 'spontaneous firing rate'
-        ].as_matrix().flatten()
-
-# recover actual firing rates (in the 500ms binning windows)
-# TODO maybe keep it as a df?
-orn = np.empty_like(delta_orn) * np.nan
-
-# TODO numpy way to do this broadcasting?
-
-# for each odor add the spontaneous rates to the difference observed for that
-# odor adds the vector of spontaneous rates across all receptors to the odor
-# specific
-# vector of reponses across receptors
-for i in range(delta_orn.shape[0]):
-    orn[i,:] = delta_orn[i,:] + spont_orn
-
-# It seems that what Luo et al do is set anything here that would go below zero
-# to zero, but that might be wrong. Read more carefully, but they might not say.
-orn[orn < 0] = 0
-orn_matrix_title = 'Average ORN responses'
-orn_pn_matrix(orn, title=orn_matrix_title, luo_style=True)
-orn_pn_matrix(orn, title=orn_matrix_title)
-
-
-"""
-Fig 1b: simple model PN responses
-(assuming now 1 receptor -> 1 PN (class). see note above)
-"""
+def fig_one_a():
+    orn_matrix_title = 'Average ORN responses'
+    orn_pn_matrix(orn, title=orn_matrix_title, luo_style=True)
+    orn_pn_matrix(orn, title=orn_matrix_title)
 
 def pn_responses_and_plots(lateral_inhibition=True):
     """
+    Fig 1b: simple model PN responses
+    (assuming now 1 receptor -> 1 PN (class). see note above)
     """
     # model PN responses with no lateral inhibition
     if lateral_inhibition:
@@ -430,14 +404,8 @@ def pn_responses_and_plots(lateral_inhibition=True):
 
     else:
         pn_responses = rmax * orn**1.5 / (sigma**1.5 + orn**1.5)
-
-        # TODO is this PEP8? or is this a case where backslash is preferred?
         pn_matrix_title = ('Average model PN responses (no lateral ' +
             'inhibition)')
-
-    # TODO TODO TODO add noise a la methods (maybe more important later?)
-    # where is it introduced, again?
-
     # TODO TODO it would be really nice to have a function to group two figs
     # into a subplot..., for easier re-use of figure generating code (beyond
     # this code)
@@ -451,153 +419,158 @@ def pn_responses_and_plots(lateral_inhibition=True):
 
     return pn_responses
 
-pn_no_inh = pn_responses_and_plots(lateral_inhibition=False)
-pn = pn_responses_and_plots()
-# TODO TODO are PN responses actually more decorrelated than the ORNs in this
-# model? or is it only subtracting the PN mean at the level of the KC input that
-# does any decorrelation? where does the decorrelation come from? and which
-# papers support this again?
-# (they claim it in the last paragraph before the "Concentration dependence"
-# section)
+def fig_one_b():
+    pn_no_inh = pn_responses_and_plots(lateral_inhibition=False)
+    pn = pn_responses_and_plots()
+    # TODO TODO are PN responses actually more decorrelated than the ORNs in
+    # this model? or is it only subtracting the PN mean at the level of the KC
+    # input that does any decorrelation? where does the decorrelation come from?
+    # and which papers support this again?
+    # (they claim it in the last paragraph before the "Concentration dependence"
+    # section)
+
+def fig_one_c_thru_e(orn, pn_no_inh, pn):
+    # TODO refactor / at least add inner plotting fn
+    """
+    Fig 1C - E
+    """
+    fig3 = plt.figure()
+    #fig3.title('Mean firing rates across odors')
+
+    # TODO relative to averages like in paper
+    a1 = plt.subplot(131)
+    orn_mean = np.mean(orn, axis=1)
+    plt.plot(np.arange(orn.shape[0]), orn_mean / np.mean(orn_mean), '.')
+    plt.title('ORN')
+    plt.ylabel('Firing rate (spikes/s)')
+
+    # this overall activity just seemed to high because i didn't yet normalize
+    a2 = plt.subplot(132)
+    pn_no_inh_mean = np.mean(pn_no_inh, axis=1)
+    plt.plot(np.arange(pn_no_inh.shape[0]), pn_no_inh_mean /
+        np.mean(pn_no_inh_mean), '.')
+    plt.title('PN (no inhibition)')
+    a2.yaxis.set_ticklabels([])
+    plt.xlabel('Odor')
+
+    a3 = plt.subplot(133)
+    pn_mean = np.mean(pn, axis=1)
+    plt.plot(np.arange(pn.shape[0]), pn_mean / np.mean(pn_mean), '.')
+    plt.title('PN')
+    a3.yaxis.set_ticklabels([])
+
+    # get max ylim so we can rescale all subplots to have same max y limit
+    axs = [a1, a2, a3]
+    ymax = max([max(a.get_ylim()) for a in axs])
+
+    for a in axs:
+        a.set_ylim(0, ymax)
+        a.xaxis.set_ticklabels([])
 
 
-"""
-Fig 1C - E
-"""
+def fig_one_f_thru_h(orn, pn_no_inh, pn):
+    """
+    Fig 1F - H: skree plots of principal components of odor responses
+    skree plot = % variance "explained" as a function of the principal component
+    number
 
-fig3 = plt.figure()
-#fig3.title('Mean firing rates across odors')
+    Note: they say "percentage of variances from a PCA analysis of the response
+    used in C-E" which seems to mean of the average responses. It is unclear
+    that this is meaningful, as apart from normalizing in the antennal lobe, the
+    sum of the ORN response is not really what is important. Is the sum of the
+    PN response very important, or always held approx constant?
 
-a1 = plt.subplot(131)
-orn_mean = np.mean(orn, axis=1)
-plt.plot(np.arange(orn.shape[0]), orn_mean / np.mean(orn_mean), '.')
-plt.title('ORN')
-plt.ylabel('Firing rate (spikes/s)')
+    I guess they are treating odors as observations?
 
-# this overall activity just seemed to high because i didn't yet normalize
-a2 = plt.subplot(132)
-pn_no_inh_mean = np.mean(pn_no_inh, axis=1)
-plt.plot(np.arange(pn_no_inh.shape[0]), pn_no_inh_mean /
-    np.mean(pn_no_inh_mean), '.')
-plt.title('PN (no inhibition)')
-a2.yaxis.set_ticklabels([])
-plt.xlabel('Odor')
+    """
+    # TODO if i don't find code for these plots on old desktop, at least fix
+    # scale on skree plots (same scale on all). that might be only difference.
 
-a3 = plt.subplot(133)
-pn_mean = np.mean(pn, axis=1)
-plt.plot(np.arange(pn.shape[0]), pn_mean / np.mean(pn_mean), '.')
-plt.title('PN')
-a3.yaxis.set_ticklabels([])
+    # 're-scaled' data, eigenvalues, and eigenvectors
+    sorn, orn_eval, orn_evec = pca(orn)
+    snlpn, nlpn_eval, nlpn_evec = pca(pn_no_inh)
+    spn, pn_eval, pn_evec = pca(pn)
 
-# get max ylim so we can rescale all subplots to have same max y limit
-axs = [a1, a2, a3]
-ymax = max([max(a.get_ylim()) for a in axs])
+    """
+    "PCA replaces original variables with new variables, called principal
+    components, which are orthogonal (i.e. they have zero covariations) and have
+    variances (called eigenvalues)..."
 
-for a in axs:
-    a.set_ylim(0, ymax)
-    a.xaxis.set_ticklabels([])
+     The diagonal sums of original covariance matrix and covariance matrix of
+     PCs, a diagonal matrix, are equal. This quantity is called the 'total
+     variability.' Off-diagonal sum of covariance matrix is of course not
+     guaranteed to be zero.
+    """
 
+    '''
+    # can PCA perfectly reconstruct even random data with all components?
+    rand = np.random.rand(orn.shape[0], orn.shape[1])
+    rand_pca = PCA(n_components=rand.shape[1])
+    sk_rand = rand_pca.fit_transform(rand)
+    rand_reconstructed = rand_pca.inverse_transform(sk_rand)
+    # yes, it can
+    assert np.allclose(rand, rand_reconstructed)
 
-"""
-Fig 1F - H: skree plots of principal components of odor responses
-skree plot = % variance "explained" as a function of the principal component
-number
+    # one less component, and it can't
+    rand_pca = PCA(n_components=(rand.shape[1] - 1))
+    sk_rand = rand_pca.fit_transform(rand)
+    rand_reconstructed = rand_pca.inverse_transform(sk_rand)
+    assert not np.allclose(rand, rand_reconstructed)
+    '''
 
-Note: they say "percentage of variances from a PCA analysis of the response used
-in C-E" which seems to mean of the average responses. It is unclear that this is
-meaningful, as apart from normalizing in the antennal lobe, the sum of the ORN
-response is not really what is important. Is the sum of the PN response very
-important, or always held approx constant?
+    # PCA from sklearn to compare output against
+    # not reducing # of components
+    sk_pca = PCA(n_components=orn.shape[1])
+    sk_sorn = sk_pca.fit_transform(orn)
 
-I guess they are treating odors as observations?
+    # hmmm. well the norms are the same to high precision, despite different
+    # vectors ...why?
+    print(np.linalg.norm(orn_evec))
+    print(np.linalg.norm(sk_pca.components_))
+    #print(np.linalg.norm(orn_evec - sk_pca.components_))
 
-"""
-# TODO if i don't find code for these plots on old desktop, at least fix
-# scale on skree plots (same scale on all). that might be only difference.
+    print(orn_eval)
+    print(sk_pca.explained_variance_)
+    # Verdict: close, but always off a little bit. usually after 2 significant
+    # digits.  seems low by typical computer standards though... what explains
+    # the difference?
 
-# 're-scaled' data, eigenvalues, and eigenvectors
-sorn, orn_eval, orn_evec = pca(orn)
-snlpn, nlpn_eval, nlpn_evec = pca(pn_no_inh)
-spn, pn_eval, pn_evec = pca(pn)
+    # works just fine
+    # assert np.allclose(sk_pca.inverse_transform(sk_sorn), orn)
 
-"""
-"PCA replaces original variables with new variables, called principal
- components, which are orthogonal (i.e. they have zero covariations) and have
- variances (called eigenvalues)..."
+    # PCA should maintain the total variance after change of basis to that of
+    # the eigenvectors
+    assert np.isclose(np.cov(orn.T).diagonal().sum(),
+        np.cov(sorn.T).diagonal().sum())
+    assert np.isclose(np.cov(pn_no_inh.T).diagonal().sum(),
+        np.cov(snlpn.T).diagonal().sum())
+    assert np.isclose(np.cov(pn.T).diagonal().sum(),
+                      np.cov(spn.T).diagonal().sum())
 
- The diagonal sums of original covariance matrix and covariance matrix of PCs, a
- diagonal matrix, are equal. This quantity is called the 'total variability.'
- Off-diagonal sum of covariance matrix is of course not guaranteed to be zero.
-"""
+    # and off diagonal elements should be zero
+    # which means the sum of the whole matrix should be the sum of the diagonal
+    assert np.isclose(np.cov(sorn.T).diagonal().sum(), np.cov(sorn.T).sum())
+    assert np.isclose(np.cov(snlpn.T).diagonal().sum(), np.cov(snlpn.T).sum())
+    assert np.isclose(np.cov(spn.T).diagonal().sum(), np.cov(spn.T).sum())
+    # TODO move above in to test_PCA
 
-'''
-# can PCA perfectly reconstruct even random data with all components?
-rand = np.random.rand(orn.shape[0], orn.shape[1])
-rand_pca = PCA(n_components=rand.shape[1])
-sk_rand = rand_pca.fit_transform(rand)
-rand_reconstructed = rand_pca.inverse_transform(sk_rand)
-# yes, it can
-assert np.allclose(rand, rand_reconstructed)
+    # has its own assertion
+    test_pca(orn)
+    test_pca(pn_no_inh)
+    test_pca(pn)
 
-# one less component, and it can't
-rand_pca = PCA(n_components=(rand.shape[1] - 1))
-sk_rand = rand_pca.fit_transform(rand)
-rand_reconstructed = rand_pca.inverse_transform(sk_rand)
-assert not np.allclose(rand, rand_reconstructed)
-'''
+    # if our PCA is working correctly, generate the Skree plots
+    plt.figure()
+    plt.title('Fraction of total variance along each PC')
+    plt.xlabel('n-th largest eigenvalue of eigenvectors')
+    plt.ylabel("Fraction of total variance 'explained'")
 
-# PCA from sklearn to compare output against
-# not reducing # of components
-sk_pca = PCA(n_components=orn.shape[1])
-sk_sorn = sk_pca.fit_transform(orn)
-
-# hmmm. well the norms are the same to high precision, despite different vectors
-# ...why?
-print(np.linalg.norm(orn_evec))
-print(np.linalg.norm(sk_pca.components_))
-#print(np.linalg.norm(orn_evec - sk_pca.components_))
-
-print(orn_eval)
-print(sk_pca.explained_variance_)
-# Verdict: close, but always off a little bit. usually after 2 significant
-# digits.  seems low by typical computer standards though... what explains the
-# difference?
-
-# works just fine
-# assert np.allclose(sk_pca.inverse_transform(sk_sorn), orn)
-
-# PCA should maintain the total variance after change of basis to that of the
-# eigenvectors
-assert np.isclose(np.cov(orn.T).diagonal().sum(),
-    np.cov(sorn.T).diagonal().sum())
-assert np.isclose(np.cov(pn_no_inh.T).diagonal().sum(),
-    np.cov(snlpn.T).diagonal().sum())
-assert np.isclose(np.cov(pn.T).diagonal().sum(), np.cov(spn.T).diagonal().sum())
-
-# and off diagonal elements should be zero
-# which means the sum of the whole matrix should be the sum of the diagonal
-assert np.isclose(np.cov(sorn.T).diagonal().sum(), np.cov(sorn.T).sum())
-assert np.isclose(np.cov(snlpn.T).diagonal().sum(), np.cov(snlpn.T).sum())
-assert np.isclose(np.cov(spn.T).diagonal().sum(), np.cov(spn.T).sum())
-# TODO move above in to test_PCA
-
-# has its own assertion
-test_pca(orn)
-test_pca(pn_no_inh)
-test_pca(pn)
-
-# if our PCA is working correctly, generate the Skree plots
-plt.figure()
-plt.title('Fraction of total variance along each PC')
-plt.xlabel('n-th largest eigenvalue of eigenvectors')
-plt.ylabel("Fraction of total variance 'explained'")
-
-plt.subplot(131)
-plt.plot(orn_eval / orn_eval.sum(), '.')
-plt.subplot(132)
-plt.plot(nlpn_eval / nlpn_eval.sum(), '.')
-plt.subplot(133)
-plt.plot(pn_eval / pn_eval.sum(), '.')
+    plt.subplot(131)
+    plt.plot(orn_eval / orn_eval.sum(), '.')
+    plt.subplot(132)
+    plt.plot(nlpn_eval / nlpn_eval.sum(), '.')
+    plt.subplot(133)
+    plt.plot(pn_eval / pn_eval.sum(), '.')
 
 
 # TODO move down?
@@ -621,22 +594,6 @@ def noisy_pns(alpha=alpha_pn_noise_hz, sigma=sigma_pn_noise_hz, trials=1):
     # TODO plot version of resonses w/ noise added for sanity checking?
     return (pn + (sigma * np.tanh(alpha * pn) *
         np.random.normal(loc=0.0, scale=1.0, size=pn.shape))).T
-
-"""
-Fig 2: Responses of model LHNs
-
-'...we constructed 110 LHNs, each selective for a different one of the 110
-odorants... We are not suggesting that each of these odors generates an innate
-behavbiort. Instead, the model LHNs are used...to demonstrate how...selective
-LHNs can be constructed.'
-"""
-
-
-
-
-"""
-Fig 3: Model KC responses
-"""
 
 # think about naming conventions here...
 # TODO rewrite to allow for distribution, rather than integer n_pns_per_kc
@@ -690,9 +647,8 @@ def pn_to_kc_inputs(n_pns_per_kc=5, n_kcs=n_kcs, verbose=False):
     '''
     return pn_to_kc_weights
 
-
-def kc_activations(pns=None, n=None, pn_to_kc_weights=None, inhibition=True, 
-                   checks=False):
+def kc_activations(n_kcs=n_kcs, pns=None, n=None, pn_to_kc_weights=None,
+                   inhibition=True, checks=False):
     """
     Args:
         pns (np.ndarray): (optional) If passed, model KC responses are computed
@@ -912,129 +868,142 @@ def silent_kcs(responses):
 def kc_response_summary(responses, weights=None):
     """
     """
-    pass
+    raise NotImplementedError
+
+def vary_n_pns_per_kc(verbose=True):
+    """Seeing how "quality" of sparse representation varies as the number of PN
+    inputs to the KCs, with quality achieved by minimizing both missed odors
+    and silent KCs, as defined above.
+    """
+    pn_to_kc_connections = [n + 1 for n in range(20)]
+    n_missed_odors = []
+    n_silent_kcs = []
+
+    if all_use_five_input_threshold:
+        ok_input_number = 5
+        # move 5 to the front of the list, so we can calculate its threshold and
+        # save it for models using a different number of PN inputs to each KC
+        assert ok_input_number in pn_to_kc_connections
+        pn_to_kc_connections.remove(ok_input_number)
+        pn_to_kc_connections.insert(0, ok_input_number)
+
+    response_threshold = None
+    # TODO TODO maybe plot weight matrices as a crude debugging step? +
+    # activations + distributions of # responders to each odor + # odors evoking
+    # a response across cells? + print different thresholds (+ distribution of
+    # activations?)
+    for n in pn_to_kc_connections:
+        if regenerate_connectivity_each_trial:
+            # kc_activations will generate the weights when pn_to_kc_weights is
+            # None (the default)
+            pn_kc_weights = None
+        else:
+            pn_kc_weights = pn_to_kc_inputs(n_pns_per_kc=n)
+
+        print(('simulating {} trials of KC activation to Hallem odors, each ' +
+               'KC receiving {} input(s).').format(simulated_trials, n))
+
+        # TODO maybe refactor again? i feel like i've make my control over when
+        # to check kind of cumbersome. maybe likewise for the weights, but i do
+        # like having default for everything, so that each function can pretty
+        # much just be called on it's own, to make it easier for someone to play
+        # around with the functions...
+        kc_response_probability, last_response_threshold = calc_response_prob(
+            trial_fn=lambda: kc_activations(pn_to_kc_weights=pn_kc_weights,
+                                            checks=True if n == 0 else False),
+            response_threshold=response_threshold)
 
 
-# Seeing how "quality" of sparse representation varies as the number of PN
-# inputs to the KCs, with quality achieved by minimizing both missed odors and
-# silent KCs, as defined above.
-pn_to_kc_connections = [n + 1 for n in range(20)]
-n_missed_odors = []
-n_silent_kcs = []
+        # because this is used for most of the plots
+        if n == 5:
+            five_inputs_kc_p_response = kc_response_probability
+            if all_use_five_input_threshold:
+                print('using response threshold determined with 5 input ' + 
+                      'model for all other models!')
+                response_threshold = last_response_threshold
 
-if all_use_five_input_threshold:
-    ok_input_number = 5
-    # move 5 to the front of the list, so we can calculate its threshold and
-    # save it for models using a different number of PN inputs to each KC
-    assert ok_input_number in pn_to_kc_connections
-    pn_to_kc_connections.remove(ok_input_number)
-    pn_to_kc_connections.insert(0, ok_input_number)
+        responses = responders(kc_response_probability)
+        n_missed_odors.append(missed_odors(responses))
+        n_silent_kcs.append(silent_kcs(responses))
 
-response_threshold = None
-# TODO TODO maybe plot weight matrices as a crude debugging step? + activations
-# + distributions of # responders to each odor + # odors evoking a response
-# across cells? + print different thresholds (+ distribution of activations?)
-for n in pn_to_kc_connections:
-    if regenerate_connectivity_each_trial:
-        # kc_activations will generate the weights when pn_to_kc_weights is
-        # None (the default)
-        pn_kc_weights = None
-    else:
-        pn_kc_weights = pn_to_kc_inputs(n_pns_per_kc=n)
+    # TODO break into two functions, one ending here?
 
-    print('simulating {} trials of KC activation '.format(simulated_trials) + 
-        'to Hallem odors, each KC receiving {} input(s).'.format(n))
+    # 3A: "response probabilities" of model KCs, each receiving input from n PNs
+    # and global inhibition
+    # TODO what is this actually a plot of? the bars are too wide to actually
+    # fit 2500 cells, unless maybe light colors overwrite neighboring darker
+    # colors, and everything is plotted much wider than it should be...
+    # like, this figure is just a hair under 40mm and 40mm / 2500 = 0.016mm,
+    # yet each light bar is about 0.7mm wide (maybe a little less, >= 0.65mm)
+    # which only leaves room for about 67 cells, best case
+    # a random sample would make sense... is that what it is?
 
-    # TODO maybe refactor again? i feel like i've make my control over when to
-    # check kind of cumbersome. maybe likewise for the weights, but i do like
-    # having default for everything, so that each function can pretty much just
-    # be called on it's own, to make it easier for someone to play around with
-    # the functions...
-    kc_response_probability, calculated_response_threshold = calc_response_prob(
-        trial_fn=lambda: kc_activations(pn_to_kc_weights=pn_kc_weights,
-                                        checks=True if n == 0 else False),
-        response_threshold=response_threshold)
+    # i think this is about how many there are
+    apparent_number_kcs_plotted = 80
+    kcs_to_plot = np.random.choice(n_kcs, apparent_number_kcs_plotted,
+        replace=False)
 
+    # take the random sample within the plotting function?
+    kc_matrix(five_inputs_kc_p_response[kcs_to_plot, :], luo_style=True)
+    kc_matrix(five_inputs_kc_p_response[kcs_to_plot, :])
 
-    # because this is used for most of the plots
-    if n == 5:
-        five_inputs_kc_p_response = kc_response_probability
+    # 3B: the number of missed odors as a function of # of PNs each KC receives
+    # input from
 
-        if all_use_five_input_threshold:
-            print('using response threshold determined with 5 input model ' +
-                  'for all other models!')
-            response_threshold = calculated_response_threshold
+    # TODO TODO TODO i was able to roughly match the silent KC graph, but the
+    # missed odors is all flat at zero, with 1 missed odor at 1 input per KC.
+    # why is that?  do i need to use the same threshold (determined at n=5) for
+    # everything, or something?
+    print('n_missed_odors:', n_missed_odors)
+    print('n_silent_kcs:', n_silent_kcs)
 
-    responses = responders(kc_response_probability)
-    n_missed_odors.append(missed_odors(responses))
-    n_silent_kcs.append(silent_kcs(responses))
+    # TODO TODO TODO look at distribution of number of inputs required for the
+    # threshold response (possible?)? and distribution not leading to a
+    # response?  (maybe the uniform distribution has some subtle consequences?)
 
-del kc_response_probability
+    # TODO do i also get an average of ~125 cells responding per odor ("and min
+    # of 2 cells", over all 110 odors) (this is all for the 5 input case)
 
+    def three_b(xs, ys, ylabel, title=''):
+        _ = plt.figure()
+        plt.plot(xs, ys, 'r.')
+        plt.title(title, fontweight='bold', y=1.01)
+        plt.xlabel('Number of PN to KC connections', x_axes_font)
+        plt.ylabel(ylabel, y_axes_font)
+        # TODO fix x tick marks to only display integers
 
-# 3A: "response probabilities" of model KCs, each receiving input from n PNs
-# and global inhibition
-# TODO what is this actually a plot of? the bars are too wide to actually
-# fit 2500 cells, unless maybe light colors overwrite neighboring darker
-# colors, and everything is plotted much wider than it should be...
-# like, this figure is just a hair under 40mm and 40mm / 2500 = 0.016mm,
-# yet each light bar is about 0.7mm wide (maybe a little less, >= 0.65mm)
-# which only leaves room for about 67 cells, best case
-# a random sample would make sense... is that what it is?
-
-# i think this is about how many there are
-#apparent_number_kcs_plotted = 80
-apparent_number_kcs_plotted = 110
-kcs_to_plot = np.random.choice(n_kcs, apparent_number_kcs_plotted,
-    replace=False)
-
-# take the random sample within the plotting function?
-kc_matrix(five_inputs_kc_p_response[kcs_to_plot, :], luo_style=True)
-kc_matrix(five_inputs_kc_p_response[kcs_to_plot, :])
-
-# 3B: the number of missed odors as a function of # of PNs each KC receives
-# input from
-# TODO delete me
-plt.close('all')
+    three_b(pn_to_kc_connections, n_missed_odors, 'Missed Odors')
+    three_b(pn_to_kc_connections, n_silent_kcs, 'Silent KCs')
 
 
-# TODO TODO TODO i was able to roughly match the silent KC graph, but the missed
-# odors is all flat at zero, with 1 missed odor at 1 input per KC. why is that?
-# do i need to use the same threshold (determined at n=5) for everything, or
-# something?
-print('n_missed_odors:', n_missed_odors)
-print('n_silent_kcs:', n_silent_kcs)
+if __name__ == '__main__':
+    sns.set_style('dark')
+    np.random.seed(1118)
+    """
+    Fig 1a: raw Hallem and Carlson 2006
+    """
 
-# TODO TODO TODO look at distribution of number of inputs required for the
-# threshold response (possible?)? and distribution not leading to a response?
-# (maybe the uniform distribution has some subtle consequences?)
+    """
+    Fig 2: Responses of model LHNs
 
-# TODO do i also get an average of ~125 cells responding per odor ("and min of 2
-# cells", over all 110 odors) (this is all for the 5 input case)
+    '...we constructed 110 LHNs, each selective for a different one of the 110
+    odorants... We are not suggesting that each of these odors generates an
+    innate behavbiort. Instead, the model LHNs are used...to demonstrate
+    how...selective LHNs can be constructed.'
+    """
 
-def three_b(xs, ys, ylabel, title=''):
-    _ = plt.figure()
-    plt.plot(xs, ys, 'r.')
-    plt.title(title, fontweight='bold', y=1.01)
-    plt.xlabel('Number of PN to KC connections', x_axes_font)
-    plt.ylabel(ylabel, y_axes_font)
-    # TODO fix x tick marks to only display integers
+    """
+    Fig 3: Model KC responses
+    """
+    vary_n_pns_per_kc()
 
-three_b(pn_to_kc_connections, n_missed_odors, 'Missed Odors')
-three_b(pn_to_kc_connections, n_silent_kcs, 'Silent KCs')
-
-
-"""
-Fig 4: LHN and KC responses for different concentrations
-"""
+    """
+    Fig 4: LHN and KC responses for different concentrations
+    """
 
 
-"""
-Fig 5: Effect of feedforward nonlinearity and lateral suppression on LHN and KC
-responses.
-"""
-
-
-
-
-plt.show()
+    """
+    Fig 5: Effect of feedforward nonlinearity and lateral suppression on LHN and
+    KC responses.
+    """
+    plt.show()
